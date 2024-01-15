@@ -1,0 +1,11 @@
+PREFIX vg:<http://biohackathon.org/resource/vg#> 
+
+SELECT
+  ?node
+  (COUNT(?node1) AS ?c)
+WHERE 
+{
+  ?node vg:linksForwardToForward ?node2 .
+} 
+GROUP BY ?node 
+ORDER BY (COUNT(?node2)) 

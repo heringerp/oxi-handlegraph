@@ -16,6 +16,7 @@ data/
 **.pyi
 
 *.txt
+!query/*.txt
 *.gfa
 *.ttl
 
