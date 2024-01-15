@@ -18,5 +18,6 @@ data/
 *.txt
 !query/*.txt
 *.gfa
+!lib/*.gfa
 *.ttl
 
