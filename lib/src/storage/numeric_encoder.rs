@@ -101,6 +101,9 @@ pub enum EncodedTerm {
     Triple(Rc<EncodedTriple>),
 }
 
+unsafe impl Send for EncodedTerm {}
+unsafe impl Sync for EncodedTerm {}
+
 impl PartialEq for EncodedTerm {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
