@@ -342,18 +342,17 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        let mut results = Vec::new();
         if subject.is_none() {
             println!("SF: none subject");
-            // TODO: for
-            for path_id in self.storage.graph.path_ids() {
+            self.storage.graph.path_ids().par_bridge().map(|path_id| {
                 if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
+                    let mut intermediate_results = Vec::new();
                     let path_name = self.get_path_name(path_id).unwrap();
                     let mut rank = 1;
                     let mut position = 1;
                     let step_handle = path_ref.step_at(path_ref.first_step());
                     if step_handle.is_none() {
-                        continue;
+                        return Vec::new();
                     }
                     let mut step_handle = step_handle.unwrap();
                     let mut node_handle = step_handle.handle();
@@ -367,10 +366,10 @@ impl StorageGenerator {
                         Some(rank),
                         Some(position),
                     );
-                    results.append(&mut triples);
+                    intermediate_results.append(&mut triples);
 
                     let steps = self.storage.graph.path_steps(path_id).expect("Path has steps");
-                    // TODO: for
+                    // TODO: for: does this make sense to be parallelized?
                     for _ in steps.skip(1) {
                         step_handle = path_ref.next_step(step_handle.0).unwrap();
                         position += self.storage.graph.node_len(node_handle);
@@ -386,11 +385,15 @@ impl StorageGenerator {
                             Some(rank),
                             Some(position),
                             );
-                        results.append(&mut triples);
+                        intermediate_results.append(&mut triples);
                     }
+                    intermediate_results
+                } else {
+                    Vec::new()
                 }
-            }
+            }).flatten().collect()
         } else if let Some(step_type) = self.get_step_iri_fields(subject) {
+            let mut results = Vec::new();
             println!("SF: some subject");
             match step_type {
                 StepType::Rank(path_name, target_rank) => {
@@ -404,7 +407,7 @@ impl StorageGenerator {
                         let mut position = 1;
 
                         let steps = self.storage.graph.path_steps(id).expect("Path has steps");
-                        // TODO: for
+                        // TODO: for -> probably cannot/does not make sense be parallelized
                         for _ in steps.skip(1) {
                             if rank >= target_rank {
                                 break;
@@ -450,8 +453,10 @@ impl StorageGenerator {
                     }
                 }
             }
+            results
+        } else {
+            Vec::new()
         }
-        results
     }
 
     fn get_step_iri_fields(&self, term: Option<&EncodedTerm>) -> Option<StepType> {
