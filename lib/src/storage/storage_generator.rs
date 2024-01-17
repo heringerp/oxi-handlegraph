@@ -302,7 +302,6 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        let mut results = Vec::new();
         // TODO: for
         self.storage.graph.path_ids().par_bridge().map(|path_id| {
             let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
@@ -324,28 +323,28 @@ impl StorageGenerator {
                 }
             }
             None
-        });
-        for path_id in self.storage.graph.path_ids() {
-            let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
-                continue;
-            };
-            let path_name = path_name.collect::<Vec<_>>();
-            let path_name = str::from_utf8(&path_name).unwrap();
-            let path_node = self.path_to_namednode(path_name);
-            if subject.is_none() || path_node.as_ref() == subject {
-                if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
-                    && (object.is_none() || self.is_vocab(object, vg::PATH))
-                {
-                    results.push(EncodedQuad::new(
-                        path_node.unwrap(),
-                        rdf::TYPE.into(),
-                        vg::PATH.into(),
-                        graph_name.to_owned(),
-                    ));
-                }
-            }
-        }
-        results
+        }).flatten().collect()
+        // for path_id in self.storage.graph.path_ids() {
+        //     let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
+        //         continue;
+        //     };
+        //     let path_name = path_name.collect::<Vec<_>>();
+        //     let path_name = str::from_utf8(&path_name).unwrap();
+        //     let path_node = self.path_to_namednode(path_name);
+        //     if subject.is_none() || path_node.as_ref() == subject {
+        //         if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
+        //             && (object.is_none() || self.is_vocab(object, vg::PATH))
+        //         {
+        //             results.push(EncodedQuad::new(
+        //                 path_node.unwrap(),
+        //                 rdf::TYPE.into(),
+        //                 vg::PATH.into(),
+        //                 graph_name.to_owned(),
+        //             ));
+        //         }
+        //     }
+        // }
+        // results
     }
 
     fn steps(
