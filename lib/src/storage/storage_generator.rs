@@ -742,28 +742,27 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        let mut results = Vec::new();
         if predicate.is_none() || self.is_node_related(predicate) {
             let handle = Handle::new(
                 self.get_node_id(subject).expect("Subject has node id"),
                 Orientation::Forward,
             );
             let neighbors = self.storage.graph.neighbors(handle, Direction::Right);
-            // TODO: for
-            for neighbor in neighbors {
+            neighbors.par_bridge().map(|neighbor| {
                 if object.is_none()
                     || self
                         .get_node_id(object.unwrap())
                         .expect("Object has node id")
                         == neighbor.unpack_number()
                 {
-                    let mut edge_triples =
-                        self.generate_edge_triples(handle, neighbor, predicate, graph_name);
-                    results.append(&mut edge_triples);
+                    self.generate_edge_triples(handle, neighbor, predicate, graph_name)
+                } else {
+                    Vec::new()
                 }
-            }
+            }).flatten().collect()
+        } else {
+            Vec::new()
         }
-        results
     }
 
     fn generate_edge_triples(
