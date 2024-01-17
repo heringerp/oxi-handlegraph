@@ -273,23 +273,12 @@ impl StorageGenerator {
                 }
             }
             None => {
-                // TODO: for
-                // results.extend(self.storage.graph.handles().par_bridge().map(|handle| {
-                //     // let term = self
-                //     //     .handle_to_namednode(handle)
-                //     //     .expect("Can turn handle to namednode");
-                //     //self.nodes(None, predicate, object, graph_name)
-                //     handle
-                // }).flatten());
-                for handle in self.storage.graph.handles() {
-                    let term = self
-                        .handle_to_namednode(handle)
-                        .expect("Can turn handle to namednode");
-                    let mut recursion_results =
-                        self.nodes(Some(&term), predicate, object, graph_name);
-                    results.append(&mut recursion_results);
-                }
-                // println!("{:?}", results);
+                return self.storage.graph.handles().par_bridge().map(|handle| {
+                     let term = self
+                         .handle_to_namednode(handle)
+                         .expect("Can turn handle to namednode");
+                    self.nodes(Some(&term), predicate, object, graph_name)
+                }).flatten().collect();
             }
         }
         results
@@ -302,7 +291,6 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        // TODO: for
         self.storage.graph.path_ids().par_bridge().map(|path_id| {
             let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
                 return None;
