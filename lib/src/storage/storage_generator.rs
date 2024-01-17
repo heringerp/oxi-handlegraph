@@ -393,7 +393,6 @@ impl StorageGenerator {
                 }
             }).flatten().collect()
         } else if let Some(step_type) = self.get_step_iri_fields(subject) {
-            let mut results = Vec::new();
             println!("SF: some subject");
             match step_type {
                 StepType::Rank(path_name, target_rank) => {
@@ -418,7 +417,7 @@ impl StorageGenerator {
                             rank += 1;
                         }
                         println!("Now handling: {}, {}, {}", rank, position, node_handle.0);
-                        let mut triples = self.step_handle_to_triples(
+                        self.step_handle_to_triples(
                             &path_name,
                             subject,
                             predicate,
@@ -427,8 +426,10 @@ impl StorageGenerator {
                             node_handle,
                             Some(rank),
                             Some(position),
-                        );
-                        results.append(&mut triples);
+                        )
+                        //results.append(&mut triples);
+                    } else {
+                        Vec::new()
                     }
                 }
                 StepType::Position(path_name, position) => {
@@ -438,7 +439,7 @@ impl StorageGenerator {
                             let node_handle =
                                 self.storage.graph.path_handle_at_step(id, step).unwrap();
                             let rank = step.pack() as usize + 1;
-                            let mut triples = self.step_handle_to_triples(
+                            self.step_handle_to_triples(
                                 &path_name,
                                 subject,
                                 predicate,
@@ -447,13 +448,17 @@ impl StorageGenerator {
                                 node_handle,
                                 Some(rank),
                                 Some(position),
-                            );
-                            results.append(&mut triples);
+                            )
+                            //results.append(&mut triples);
+                        } else {
+                            Vec::new()
                         }
+                    } else {
+                        Vec::new()
                     }
                 }
             }
-            results
+            //results
         } else {
             Vec::new()
         }
