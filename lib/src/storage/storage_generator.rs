@@ -22,6 +22,7 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::str;
+use urlencoding::{encode, decode};
 
 pub struct StorageGenerator {
     storage: Storage,
@@ -73,9 +74,6 @@ impl StorageGenerator {
         if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
             println!("OF: rdf::type");
             let terms = self.type_triples(subject, predicate, object, graph_name);
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -86,9 +84,6 @@ impl StorageGenerator {
         } else if self.is_node_related(predicate) {
             println!("OF: nodes");
             let terms = self.nodes(subject, predicate, object, graph_name);
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -99,9 +94,6 @@ impl StorageGenerator {
         } else if self.is_step_associated(predicate) {
             println!("OF: steps");
             let terms = self.steps(subject, predicate, object, graph_name);
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -112,9 +104,6 @@ impl StorageGenerator {
         } else if self.is_vocab(predicate, rdfs::LABEL) {
             println!("OF: rdfs::label");
             let terms = self.paths(subject, predicate, object, graph_name);
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -130,9 +119,6 @@ impl StorageGenerator {
             let terms_steps = self.steps(subject, predicate, object, graph_name);
             terms.extend(terms_paths);
             terms.extend(terms_steps);
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -162,9 +148,6 @@ impl StorageGenerator {
                     Vec::new()
                 }
             };
-            for triple in &terms {
-                self.print_quad(triple);
-            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -639,6 +622,7 @@ impl StorageGenerator {
     }
 
     fn get_faldo_border_namednode(&self, position: usize, path_name: &str) -> Option<EncodedTerm> {
+        let path_name = encode(path_name);
         let text = format!(
             "{}/path/{}/position/{}",
             self.storage.base, path_name, position
@@ -720,7 +704,6 @@ impl StorageGenerator {
             let seq_bytes = self.storage.graph.sequence_vec(handle);
             let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
             let seq_value = Literal::new_simple_literal(seq);
-            println!("Decoding1");
             if object.is_none()
                 || self.decode_term(object.unwrap()).unwrap() == Term::Literal(seq_value.clone())
             {
@@ -848,12 +831,16 @@ impl StorageGenerator {
     }
 
     fn step_to_namednode(&self, path_name: &str, rank: Option<usize>) -> Option<EncodedTerm> {
+        println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
+        let path_name = encode(path_name);
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank?);
         let named_node = NamedNode::new(text).ok()?;
         Some(named_node.as_ref().into())
     }
 
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
+        println!("PATH_TO_NAMEDNODE: {}", path_name);
+        let path_name = encode(path_name);
         let text = format!("{}/path/{}", self.storage.base, path_name);
         let named_node = NamedNode::new(text).ok()?;
         Some(named_node.as_ref().into())
@@ -1009,7 +996,6 @@ enum SubjectType {
 #[cfg(test)]
 mod tests {
     use std::{path::Path, str::FromStr};
-
     use crate::storage::small_string::SmallString;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1052,6 +1038,7 @@ mod tests {
     }
 
     fn get_step(path: &str, id: i64) -> EncodedTerm {
+        let path = encode(path);
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
@@ -1064,6 +1051,7 @@ mod tests {
     }
 
     fn get_path(path: &str) -> EncodedTerm {
+        let path = encode(path);
         let text = format!("{}/path/{}", BASE, path);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
@@ -1279,7 +1267,7 @@ mod tests {
             print_quad(triple);
         }
         let quad = EncodedQuad::new(
-            get_step("x", 6),
+            get_step("x#a", 6),
             vg::NODE_PRED.into(),
             get_node(9),
             EncodedTerm::DefaultGraph,
@@ -1292,12 +1280,12 @@ mod tests {
     fn test_paths() {
         let gen = get_odgi_test_file_generator("t.gfa");
         let generic_triples = gen.paths(None, None, None, &EncodedTerm::DefaultGraph);
-        let specific_triples = gen.paths(Some(&get_path("x")), Some(&rdf::TYPE.into()), Some(&vg::PATH.into()), &EncodedTerm::DefaultGraph);
+        let specific_triples = gen.paths(Some(&get_path("x#a")), Some(&rdf::TYPE.into()), Some(&vg::PATH.into()), &EncodedTerm::DefaultGraph);
         for triple in &generic_triples {
             print_quad(triple)
         }
         let quad = EncodedQuad::new(
-            get_path("x"),
+            get_path("x#a"),
             rdf::TYPE.into(),
             vg::PATH.into(),
             EncodedTerm::DefaultGraph,
