@@ -455,7 +455,8 @@ impl StorageGenerator {
             if parts.len() < 5 || parts[3] != "path" {
                 return None;
             }
-            let path_name = parts[2].to_owned();
+            let path_name = decode(parts[2]).ok()?.to_string();
+            //let path_name = parts[2].to_owned();
             match parts[1] {
                 "step" => Some(StepType::Rank(path_name, parts[0].parse().ok()?)),
                 "position" => Some(StepType::Position(path_name, parts[0].parse().ok()?)),
@@ -996,6 +997,7 @@ enum SubjectType {
 #[cfg(test)]
 mod tests {
     use std::{path::Path, str::FromStr};
+
     use crate::storage::small_string::SmallString;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1045,6 +1047,7 @@ mod tests {
     }
 
     fn get_position(path: &str, id: i64) -> EncodedTerm {
+        let path = encode(path);
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
@@ -1217,11 +1220,11 @@ mod tests {
         for triple in &step_triples {
             print_quad(triple);
         }
-        let count_step1 = count_subjects(&get_step("x", 1), &step_triples);
-        let count_step2 = count_subjects(&get_step("x", 2), &step_triples);
-        let count_pos1 = count_subjects(&get_position("x", 1), &step_triples);
-        let count_pos9 = count_subjects(&get_position("x", 9), &step_triples);
-        let count_pos10 = count_subjects(&get_position("x", 10), &step_triples);
+        let count_step1 = count_subjects(&get_step("x#a", 1), &step_triples);
+        let count_step2 = count_subjects(&get_step("x#a", 2), &step_triples);
+        let count_pos1 = count_subjects(&get_position("x#a", 1), &step_triples);
+        let count_pos9 = count_subjects(&get_position("x#a", 9), &step_triples);
+        let count_pos10 = count_subjects(&get_position("x#a", 10), &step_triples);
         assert_eq!(count_step1, 8, "Number of step 1 triples");
         assert_eq!(count_step2, 8, "Number of step 2 triples");
         assert_eq!(count_pos1, 4, "Number of pos 1 triples");
@@ -1232,7 +1235,7 @@ mod tests {
     #[test]
     fn test_step_s() {
         let gen = get_odgi_test_file_generator("t_step.gfa");
-        let step_triples = gen.steps(Some(&get_step("x", 1)), None, None, &EncodedTerm::DefaultGraph);
+        let step_triples = gen.steps(Some(&get_step("x#a", 1)), None, None, &EncodedTerm::DefaultGraph);
         for triple in &step_triples {
             print_quad(triple);
         }
