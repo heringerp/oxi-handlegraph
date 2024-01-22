@@ -51,6 +51,18 @@ impl StorageGenerator {
         println!("\t- {}\t{}\t{} .", sub, pre, obj);
     }
 
+    fn term_to_text(&self, term: Option<&EncodedTerm>) -> String {
+        if term.is_none() {
+           return "None".to_owned(); 
+        }
+        match term.expect("Term is not none") {
+            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::SmallStringLiteral(value) => format!("\"{}\"", value).to_string(),
+            EncodedTerm::IntegerLiteral(value) => value.to_string(),
+            _ => "NOT NAMED".to_owned(),
+        }
+    }
+
     pub fn quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
@@ -58,10 +70,11 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
+        println!("C:\t{}\t{}\t{} .", self.term_to_text(subject), self.term_to_text(predicate), self.term_to_text(object));
 
         // There should be no blank nodes in the data
         if subject.is_some_and(|s| s.is_blank_node()) || object.is_some_and(|o| o.is_blank_node()) {
-            println!("OF: blanks");
+            // println!("OF: blanks");
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms: Vec::new(),
@@ -72,7 +85,7 @@ impl StorageGenerator {
         }
 
         if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
-            println!("OF: rdf::type");
+            // println!("OF: rdf::type");
             let terms = self.type_triples(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -82,7 +95,7 @@ impl StorageGenerator {
                 second: None,
             };
         } else if self.is_node_related(predicate) {
-            println!("OF: nodes");
+            // println!("OF: nodes");
             let terms = self.nodes(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -92,7 +105,7 @@ impl StorageGenerator {
                 second: None,
             };
         } else if self.is_step_associated(predicate) {
-            println!("OF: steps");
+            // println!("OF: steps");
             let terms = self.steps(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -102,7 +115,7 @@ impl StorageGenerator {
                 second: None,
             };
         } else if self.is_vocab(predicate, rdfs::LABEL) {
-            println!("OF: rdfs::label");
+            // println!("OF: rdfs::label");
             let terms = self.paths(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -113,7 +126,7 @@ impl StorageGenerator {
             };
 
         } else if subject.is_none() && predicate.is_none() && object.is_none() {
-            println!("OF: triple none");
+            // println!("OF: triple none");
             let mut terms = self.nodes(subject, predicate, object, graph_name);
             let terms_paths = self.paths(subject, predicate, object, graph_name);
             let terms_steps = self.steps(subject, predicate, object, graph_name);
@@ -127,7 +140,7 @@ impl StorageGenerator {
                 second: None,
             };
         } else if subject.is_some() {
-            println!("OF: subject some");
+            // println!("OF: subject some");
             let terms = match self.get_term_type(subject.unwrap()) {
                 Some(SubjectType::NodeIri) => {
                     let mut terms = self.handle_to_triples(subject.unwrap(), predicate, object, graph_name);
@@ -221,7 +234,7 @@ impl StorageGenerator {
                     && (self.is_vocab(object, vg::NODE) || object.is_none())
                     && is_node_iri
                 {
-                    println!("NF: type predicate");
+                    // println!("NF: type predicate");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -229,7 +242,7 @@ impl StorageGenerator {
                         graph_name.to_owned(),
                     ));
                 } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri {
-                    println!("NF: node object");
+                    // println!("NF: node object");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -237,7 +250,7 @@ impl StorageGenerator {
                         graph_name.to_owned(),
                     ));
                 } else if predicate.is_none() && is_node_iri {
-                    println!("NF: none predicate");
+                    // println!("NF: none predicate");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -247,7 +260,7 @@ impl StorageGenerator {
                 }
 
                 if is_node_iri {
-                    println!("NF: is_node_iri");
+                    // println!("NF: is_node_iri");
                     let mut triples = self.handle_to_triples(sub, predicate, object, graph_name);
                     let mut edge_triples =
                         self.handle_to_edge_triples(sub, predicate, object, graph_name);
@@ -326,7 +339,7 @@ impl StorageGenerator {
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
         if subject.is_none() {
-            println!("SF: none subject");
+            // println!("SF: none subject");
             self.storage.graph.path_ids().par_bridge().map(|path_id| {
                 if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
                     let mut intermediate_results = Vec::new();
@@ -376,10 +389,10 @@ impl StorageGenerator {
                 }
             }).flatten().collect()
         } else if let Some(step_type) = self.get_step_iri_fields(subject) {
-            println!("SF: some subject");
+            // println!("SF: some subject");
             match step_type {
                 StepType::Rank(path_name, target_rank) => {
-                    println!("RANK: {}, {}", path_name, target_rank);
+                    // println!("RANK: {}, {}", path_name, target_rank);
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
                         let path_ref = self.storage.graph.get_path_ref(id).unwrap();
                         let step_handle = path_ref.step_at(path_ref.first_step());
@@ -399,7 +412,7 @@ impl StorageGenerator {
                             node_handle = step_handle.handle();
                             rank += 1;
                         }
-                        println!("Now handling: {}, {}, {}", rank, position, node_handle.0);
+                        // println!("Now handling: {}, {}, {}", rank, position, node_handle.0);
                         self.step_handle_to_triples(
                             &path_name,
                             subject,
@@ -416,7 +429,7 @@ impl StorageGenerator {
                     }
                 }
                 StepType::Position(path_name, position) => {
-                    println!("POSITION: {}, {}", path_name, position);
+                    // println!("POSITION: {}, {}", path_name, position);
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
                         if let Some(step) = self.storage.graph.path_step_at_base(id, position) {
                             let node_handle =
@@ -485,12 +498,12 @@ impl StorageGenerator {
         let rank = rank.unwrap() as i64;
         let position = position.unwrap() as i64;
         let position_literal = EncodedTerm::IntegerLiteral(position.into());
-        println!("SH");
+        // println!("SH");
 
         if subject.is_none() || step_iri == subject.unwrap().to_owned() {
             if self.is_vocab(predicate, rdf::TYPE) || predicate.is_none() {
                 if object.is_none() || self.is_vocab(object, vg::STEP) {
-                    println!("SH: none/type predicate");
+                    // println!("SH: none/type predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         rdf::TYPE.into(),
@@ -499,7 +512,7 @@ impl StorageGenerator {
                     ));
                 }
                 if object.is_none() || self.is_vocab(object, faldo::REGION) {
-                    println!("SH: region object");
+                    // println!("SH: region object");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         rdf::TYPE.into(),
@@ -513,7 +526,7 @@ impl StorageGenerator {
                 || predicate.is_none() && !node_handle.is_reverse())
                 && (object.is_none() || node_iri == object.unwrap().to_owned())
             {
-                println!("SH: node object");
+                // println!("SH: node object");
                 results.push(EncodedQuad::new(
                     step_iri.clone(),
                     vg::NODE_PRED.into(),
@@ -526,7 +539,7 @@ impl StorageGenerator {
                 || predicate.is_none() && node_handle.is_reverse())
                 && (object.is_none() || node_iri == object.unwrap().to_owned())
             {
-                println!("SH: reverse node object");
+                // println!("SH: reverse node object");
                 results.push(EncodedQuad::new(
                     step_iri.clone(),
                     vg::REVERSE_OF_NODE.into(),
@@ -538,7 +551,7 @@ impl StorageGenerator {
             if self.is_vocab(predicate, vg::RANK) || predicate.is_none() {
                 let rank_literal = EncodedTerm::IntegerLiteral(rank.into());
                 if object.is_none() || object.unwrap().to_owned() == rank_literal {
-                    println!("SH: rank predicate");
+                    // println!("SH: rank predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::RANK.into(),
@@ -550,7 +563,7 @@ impl StorageGenerator {
 
             if self.is_vocab(predicate, vg::POSITION) || predicate.is_none() {
                 if object.is_none() || object.unwrap().to_owned() == position_literal {
-                    println!("SH: position predicate");
+                    // println!("SH: position predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::POSITION.into(),
@@ -562,7 +575,7 @@ impl StorageGenerator {
 
             if self.is_vocab(predicate, vg::PATH_PRED) || predicate.is_none() {
                 if object.is_none() || path_iri == object.unwrap().to_owned() {
-                    println!("SH: path predicate");
+                    // println!("SH: path predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::PATH_PRED.into(),
@@ -574,7 +587,7 @@ impl StorageGenerator {
 
             if predicate.is_none() || self.is_vocab(predicate, faldo::BEGIN) {
                 if object.is_none() || object.unwrap().to_owned() == position_literal {
-                    println!("SH: begin predicate");
+                    // println!("SH: begin predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         faldo::BEGIN.into(),
@@ -587,7 +600,7 @@ impl StorageGenerator {
             if predicate.is_none() || self.is_vocab(predicate, faldo::END) {
                 // FIX: End position_literal vs position + node_len
                 if object.is_none() || object.unwrap().to_owned() == position_literal {
-                    println!("SH: end predicate");
+                    // println!("SH: end predicate");
                     results.push(EncodedQuad::new(
                         step_iri,
                         faldo::END.into(),
@@ -599,7 +612,7 @@ impl StorageGenerator {
             }
 
             if subject.is_none() {
-                println!("SH: trailing none subject");
+                // println!("SH: trailing none subject");
                 let begin_pos = position as usize;
                 let begin = self.get_faldo_border_namednode(begin_pos, path_name);
                 let mut begins = self.faldo_for_step(
@@ -646,7 +659,7 @@ impl StorageGenerator {
         if (predicate.is_none() || self.is_vocab(predicate, faldo::POSITION_PRED))
             && (object.is_none() || object.unwrap().to_owned() == ep)
         {
-            println!("FS: position");
+            // println!("FS: position");
             results.push(EncodedQuad::new(
                 subject.clone().unwrap(),
                 faldo::POSITION_PRED.into(),
@@ -657,7 +670,7 @@ impl StorageGenerator {
         if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
             && (object.is_none() || self.is_vocab(object, faldo::EXACT_POSITION))
         {
-            println!("FS: position");
+            // println!("FS: position");
             results.push(EncodedQuad::new(
                 subject.clone().unwrap(),
                 rdf::TYPE.into(),
@@ -832,7 +845,7 @@ impl StorageGenerator {
     }
 
     fn step_to_namednode(&self, path_name: &str, rank: Option<usize>) -> Option<EncodedTerm> {
-        println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
+        // println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
         let path_name = encode(path_name);
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank?);
         let named_node = NamedNode::new(text).ok()?;
@@ -840,7 +853,7 @@ impl StorageGenerator {
     }
 
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
-        println!("PATH_TO_NAMEDNODE: {}", path_name);
+        // println!("PATH_TO_NAMEDNODE: {}", path_name);
         let path_name = encode(path_name);
         let text = format!("{}/path/{}", self.storage.base, path_name);
         let named_node = NamedNode::new(text).ok()?;
