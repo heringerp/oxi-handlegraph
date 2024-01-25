@@ -969,7 +969,6 @@ pub trait Decoder: StrLookup {
 
 impl<S: StrLookup> Decoder for S {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
-        println!("DECODING: {:?}", encoded);
         match encoded {
             EncodedTerm::DefaultGraph => {
                 Err(CorruptionError::msg("The default graph tag is not a valid term").into())

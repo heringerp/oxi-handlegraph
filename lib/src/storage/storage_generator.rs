@@ -35,15 +35,15 @@ impl StorageGenerator {
 
     fn print_quad(&self, quad: &EncodedQuad) {
         let sub = match &quad.subject {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             _ => "NOT NAMED".to_owned(),
         };
         let pre = match &quad.predicate {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             _ => "NOT NAMED".to_owned(),
         };
         let obj = match &quad.object {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             EncodedTerm::SmallStringLiteral(value) => format!("\"{}\"", value).to_string(),
             EncodedTerm::IntegerLiteral(value) => value.to_string(),
             _ => "NOT NAMED".to_owned(),
@@ -56,7 +56,7 @@ impl StorageGenerator {
            return "None".to_owned(); 
         }
         match term.expect("Term is not none") {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             EncodedTerm::SmallStringLiteral(value) => format!("\"{}\"", value).to_string(),
             EncodedTerm::IntegerLiteral(value) => value.to_string(),
             _ => "NOT NAMED".to_owned(),
@@ -70,7 +70,7 @@ impl StorageGenerator {
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
-        println!("C:\t{}\t{}\t{} .", self.term_to_text(subject), self.term_to_text(predicate), self.term_to_text(object));
+        //println!("C:\t{}\t{}\t{} .", self.term_to_text(subject), self.term_to_text(predicate), self.term_to_text(object));
 
         // There should be no blank nodes in the data
         if subject.is_some_and(|s| s.is_blank_node()) || object.is_some_and(|o| o.is_blank_node()) {
@@ -236,26 +236,26 @@ impl StorageGenerator {
                 {
                     // println!("NF: type predicate");
                     results.push(EncodedQuad::new(
-                        sub.to_owned(),
+                        sub.clone(),
                         rdf::TYPE.into(),
                         vg::NODE.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri {
                     // println!("NF: node object");
                     results.push(EncodedQuad::new(
-                        sub.to_owned(),
+                        sub.clone(),
                         rdf::TYPE.into(),
                         vg::NODE.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 } else if predicate.is_none() && is_node_iri {
                     // println!("NF: none predicate");
                     results.push(EncodedQuad::new(
-                        sub.to_owned(),
+                        sub.clone(),
                         rdf::TYPE.into(),
                         vg::NODE.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
 
@@ -302,7 +302,7 @@ impl StorageGenerator {
                         path_node.unwrap(),
                         rdf::TYPE.into(),
                         vg::PATH.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
@@ -323,7 +323,7 @@ impl StorageGenerator {
         //                 path_node.unwrap(),
         //                 rdf::TYPE.into(),
         //                 vg::PATH.into(),
-        //                 graph_name.to_owned(),
+        //                 graph_name.clone(),
         //             ));
         //         }
         //     }
@@ -469,7 +469,7 @@ impl StorageGenerator {
                 return None;
             }
             let path_name = decode(parts[2]).ok()?.to_string();
-            //let path_name = parts[2].to_owned();
+            //let path_name = parts[2].clone();
             match parts[1] {
                 "step" => Some(StepType::Rank(path_name, parts[0].parse().ok()?)),
                 "position" => Some(StepType::Position(path_name, parts[0].parse().ok()?)),
@@ -500,7 +500,7 @@ impl StorageGenerator {
         let position_literal = EncodedTerm::IntegerLiteral(position.into());
         // println!("SH");
 
-        if subject.is_none() || step_iri == subject.unwrap().to_owned() {
+        if subject.is_none() || step_iri == subject.unwrap().clone() {
             if self.is_vocab(predicate, rdf::TYPE) || predicate.is_none() {
                 if object.is_none() || self.is_vocab(object, vg::STEP) {
                     // println!("SH: none/type predicate");
@@ -508,7 +508,7 @@ impl StorageGenerator {
                         step_iri.clone(),
                         rdf::TYPE.into(),
                         vg::STEP.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
                 if object.is_none() || self.is_vocab(object, faldo::REGION) {
@@ -517,96 +517,96 @@ impl StorageGenerator {
                         step_iri.clone(),
                         rdf::TYPE.into(),
                         faldo::REGION.into(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
             let node_iri = self.handle_to_namednode(node_handle).unwrap();
             if (self.is_vocab(predicate, vg::NODE_PRED)
                 || predicate.is_none() && !node_handle.is_reverse())
-                && (object.is_none() || node_iri == object.unwrap().to_owned())
+                && (object.is_none() || node_iri == object.unwrap().clone())
             {
                 // println!("SH: node object");
                 results.push(EncodedQuad::new(
                     step_iri.clone(),
                     vg::NODE_PRED.into(),
                     node_iri.clone(),
-                    graph_name.to_owned(),
+                    graph_name.clone(),
                 ));
             }
 
             if (self.is_vocab(predicate, vg::REVERSE_OF_NODE)
                 || predicate.is_none() && node_handle.is_reverse())
-                && (object.is_none() || node_iri == object.unwrap().to_owned())
+                && (object.is_none() || node_iri == object.unwrap().clone())
             {
                 // println!("SH: reverse node object");
                 results.push(EncodedQuad::new(
                     step_iri.clone(),
                     vg::REVERSE_OF_NODE.into(),
                     node_iri,
-                    graph_name.to_owned(),
+                    graph_name.clone(),
                 ));
             }
 
             if self.is_vocab(predicate, vg::RANK) || predicate.is_none() {
                 let rank_literal = EncodedTerm::IntegerLiteral(rank.into());
-                if object.is_none() || object.unwrap().to_owned() == rank_literal {
+                if object.is_none() || object.unwrap().clone() == rank_literal {
                     // println!("SH: rank predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::RANK.into(),
                         rank_literal,
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
 
             if self.is_vocab(predicate, vg::POSITION) || predicate.is_none() {
-                if object.is_none() || object.unwrap().to_owned() == position_literal {
+                if object.is_none() || object.unwrap().clone() == position_literal {
                     // println!("SH: position predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::POSITION.into(),
                         position_literal.clone(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
 
             if self.is_vocab(predicate, vg::PATH_PRED) || predicate.is_none() {
-                if object.is_none() || path_iri == object.unwrap().to_owned() {
+                if object.is_none() || path_iri == object.unwrap().clone() {
                     // println!("SH: path predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         vg::PATH_PRED.into(),
                         path_iri.clone(),
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
 
             if predicate.is_none() || self.is_vocab(predicate, faldo::BEGIN) {
-                if object.is_none() || object.unwrap().to_owned() == position_literal {
+                if object.is_none() || object.unwrap().clone() == position_literal {
                     // println!("SH: begin predicate");
                     results.push(EncodedQuad::new(
                         step_iri.clone(),
                         faldo::BEGIN.into(),
                         self.get_faldo_border_namednode(position as usize, path_name)
                             .unwrap(), // FIX
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
             if predicate.is_none() || self.is_vocab(predicate, faldo::END) {
                 // FIX: End position_literal vs position + node_len
-                if object.is_none() || object.unwrap().to_owned() == position_literal {
+                if object.is_none() || object.unwrap().clone() == position_literal {
                     // println!("SH: end predicate");
                     results.push(EncodedQuad::new(
                         step_iri,
                         faldo::END.into(),
                         self.get_faldo_border_namednode(position as usize + node_len, path_name)
                             .unwrap(), // FIX
-                        graph_name.to_owned(),
+                        graph_name.clone(),
                     ));
                 }
             }
@@ -657,14 +657,14 @@ impl StorageGenerator {
         let mut results = Vec::new();
         let ep = EncodedTerm::IntegerLiteral((position as i64).into());
         if (predicate.is_none() || self.is_vocab(predicate, faldo::POSITION_PRED))
-            && (object.is_none() || object.unwrap().to_owned() == ep)
+            && (object.is_none() || object.unwrap().clone() == ep)
         {
             // println!("FS: position");
             results.push(EncodedQuad::new(
                 subject.clone().unwrap(),
                 faldo::POSITION_PRED.into(),
                 ep,
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
@@ -675,7 +675,7 @@ impl StorageGenerator {
                 subject.clone().unwrap(),
                 rdf::TYPE.into(),
                 faldo::EXACT_POSITION.into(),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
@@ -685,18 +685,18 @@ impl StorageGenerator {
                 subject.clone().unwrap(),
                 rdf::TYPE.into(),
                 faldo::POSITION.into(),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none()
             || self.is_vocab(predicate, faldo::REFERENCE))
-                && (object.is_none() || object.unwrap().to_owned() == path_iri)
+                && (object.is_none() || object.unwrap().clone() == path_iri)
         {
             results.push(EncodedQuad::new(
                 subject.unwrap(),
                 faldo::REFERENCE.into(),
                 path_iri,
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         results
@@ -722,10 +722,10 @@ impl StorageGenerator {
                 || self.decode_term(object.unwrap()).unwrap() == Term::Literal(seq_value.clone())
             {
                 results.push(EncodedQuad::new(
-                    subject.to_owned(),
+                    subject.clone(),
                     rdf::VALUE.into(),
                     seq_value.as_ref().into(),
-                    graph_name.to_owned(),
+                    graph_name.clone(),
                 ));
             }
         }
@@ -733,10 +733,10 @@ impl StorageGenerator {
         //     && (object.is_none() || self.is_vocab(object, vg::NODE))
         // {
         //     results.push(EncodedQuad::new(
-        //         subject.to_owned(),
+        //         subject.clone(),
         //         rdf::TYPE.into(),
         //         vg::NODE.into(),
-        //         graph_name.to_owned(),
+        //         graph_name.clone(),
         //     ));
         // }
         results
@@ -790,7 +790,7 @@ impl StorageGenerator {
                 self.handle_to_namednode(subject).expect("Subject is fine"),
                 vg::LINKS_FORWARD_TO_FORWARD.into(),
                 self.handle_to_namednode(object).expect("Object is fine"),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_FORWARD_TO_REVERSE))
@@ -801,7 +801,7 @@ impl StorageGenerator {
                 self.handle_to_namednode(subject).expect("Subject is fine"),
                 vg::LINKS_FORWARD_TO_REVERSE.into(),
                 self.handle_to_namednode(object).expect("Object is fine"),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_REVERSE_TO_FORWARD))
@@ -812,7 +812,7 @@ impl StorageGenerator {
                 self.handle_to_namednode(subject).expect("Subject is fine"),
                 vg::LINKS_REVERSE_TO_FORWARD.into(),
                 self.handle_to_namednode(object).expect("Object is fine"),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_REVERSE_TO_REVERSE))
@@ -823,7 +823,7 @@ impl StorageGenerator {
                 self.handle_to_namednode(subject).expect("Subject is fine"),
                 vg::LINKS_REVERSE_TO_REVERSE.into(),
                 self.handle_to_namednode(object).expect("Object is fine"),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         if predicate.is_none() || self.is_vocab(predicate, vg::LINKS) {
@@ -831,7 +831,7 @@ impl StorageGenerator {
                 self.handle_to_namednode(subject).expect("Subject is fine"),
                 vg::LINKS.into(),
                 self.handle_to_namednode(object).expect("Object is fine"),
-                graph_name.to_owned(),
+                graph_name.clone(),
             ));
         }
         results
@@ -953,7 +953,7 @@ impl StorageGenerator {
                 let text = term
                     .get_named_node_value()
                     .expect("Encoded NamedNode has to have value")
-                    .to_owned();
+                    .clone();
 
                 // Remove trailing '>'
                 // text.pop();
@@ -1030,15 +1030,15 @@ mod tests {
 
     fn print_quad(quad: &EncodedQuad) {
         let sub = match &quad.subject {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             _ => "NOT NAMED".to_owned(),
         };
         let pre = match &quad.predicate {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             _ => "NOT NAMED".to_owned(),
         };
         let obj = match &quad.object {
-            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
             EncodedTerm::SmallStringLiteral(value) => format!("\"{}\"", value).to_string(),
             EncodedTerm::IntegerLiteral(value) => value.to_string(),
             _ => "NOT NAMED".to_owned(),
