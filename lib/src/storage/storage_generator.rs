@@ -24,6 +24,9 @@ use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::str;
 use urlencoding::{encode, decode};
 
+const LEN_OF_PATH_AND_SLASH: usize = 5;
+const URL_HASH: &str = "%23";
+
 pub struct StorageGenerator {
     storage: Storage,
 }
@@ -465,14 +468,25 @@ impl StorageGenerator {
         if let EncodedTerm::NamedNode { iri_id: _, value } = term {
             let mut parts = value.split("/").collect::<Vec<_>>();
             parts.reverse();
-            if parts.len() < 5 || parts[3] != "path" {
+            if parts.len() < 5 || !parts.contains(&"path") {
+                println!("We are quitting early! {:?}", parts);
                 return None;
             }
-            let path_name = decode(parts[2]).ok()?.to_string();
-            //let path_name = parts[2].clone();
             match parts[1] {
-                "step" => Some(StepType::Rank(path_name, parts[0].parse().ok()?)),
-                "position" => Some(StepType::Position(path_name, parts[0].parse().ok()?)),
+                "step" => {
+                    let step_idx = value.rfind("step").expect("Should contain step");
+                    let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
+                    let path_text = &value[start..step_idx-1].replace("/", "#");
+                    let path_name = decode(&path_text).ok()?.to_string();
+                    println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
+                    Some(StepType::Rank(path_name, parts[0].parse().ok()?))},
+                "position" => {
+                    let pos_idx = value.rfind("position").expect("Should contain position");
+                    let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
+                    let path_text = &value[start..pos_idx-1].replace("/", "#");
+                    let path_name = decode(&path_text).ok()?.to_string();
+                    println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
+                    Some(StepType::Position(path_name, parts[0].parse().ok()?))},
                 _ => None,
             }
         } else {
@@ -637,6 +651,7 @@ impl StorageGenerator {
 
     fn get_faldo_border_namednode(&self, position: usize, path_name: &str) -> Option<EncodedTerm> {
         let path_name = encode(path_name);
+        let path_name = path_name.replace(URL_HASH, "/");
         let text = format!(
             "{}/path/{}/position/{}",
             self.storage.base, path_name, position
@@ -847,6 +862,7 @@ impl StorageGenerator {
     fn step_to_namednode(&self, path_name: &str, rank: Option<usize>) -> Option<EncodedTerm> {
         // println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
         let path_name = encode(path_name);
+        let path_name = path_name.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank?);
         let named_node = NamedNode::new(text).ok()?;
         Some(named_node.as_ref().into())
@@ -855,6 +871,7 @@ impl StorageGenerator {
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
         // println!("PATH_TO_NAMEDNODE: {}", path_name);
         let path_name = encode(path_name);
+        let path_name = path_name.replace(URL_HASH, "/");
         let text = format!("{}/path/{}", self.storage.base, path_name);
         let named_node = NamedNode::new(text).ok()?;
         Some(named_node.as_ref().into())
@@ -1054,6 +1071,7 @@ mod tests {
 
     fn get_step(path: &str, id: i64) -> EncodedTerm {
         let path = encode(path);
+        let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
@@ -1061,6 +1079,7 @@ mod tests {
 
     fn get_position(path: &str, id: i64) -> EncodedTerm {
         let path = encode(path);
+        let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
@@ -1068,6 +1087,7 @@ mod tests {
 
     fn get_path(path: &str) -> EncodedTerm {
         let path = encode(path);
+        let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}", BASE, path);
         let named_node = NamedNode::new(text).unwrap();
         named_node.as_ref().into()
