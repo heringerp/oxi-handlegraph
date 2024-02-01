@@ -10,19 +10,23 @@ use crate::storage::numeric_encoder::Decoder;
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm};
 use crate::storage::vg_vocab::{faldo, vg};
 use crate::storage::DecodingQuadIterator;
+use genawaiter::{rc::{gen, Gen}, yield_};
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Handle};
 use handlegraph::packed::PackedElement;
 use handlegraph::pathhandlegraph::{path::PathStep, GraphPathsRef, IntoPathIds, PathBase};
-use handlegraph::pathhandlegraph::{GraphPathNames, GraphPaths, PathId, PathSequences, GraphPathsSteps};
+use handlegraph::pathhandlegraph::{
+    GraphPathNames, GraphPaths, GraphPathsSteps, PathId, PathSequences,
+};
 use handlegraph::{
     handlegraph::IntoHandles, handlegraph::IntoNeighbors, handlegraph::IntoSequences,
 };
 use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use rayon::iter::{ParallelBridge, ParallelIterator};
+use std::future::Future;
 use std::str;
-use urlencoding::{encode, decode};
+use urlencoding::{decode, encode};
 
 const LEN_OF_PATH_AND_SLASH: usize = 5;
 const URL_HASH: &str = "%23";
@@ -56,7 +60,7 @@ impl StorageGenerator {
 
     fn term_to_text(&self, term: Option<&EncodedTerm>) -> String {
         if term.is_none() {
-           return "None".to_owned(); 
+            return "None".to_owned();
         }
         match term.expect("Term is not none") {
             EncodedTerm::NamedNode { iri_id: _, value } => value.clone(),
@@ -78,25 +82,12 @@ impl StorageGenerator {
         // There should be no blank nodes in the data
         if subject.is_some_and(|s| s.is_blank_node()) || object.is_some_and(|o| o.is_blank_node()) {
             // println!("OF: blanks");
-            return ChainedDecodingQuadIterator {
-                first: DecodingQuadIterator {
-                    terms: Vec::new(),
-                    encoding: QuadEncoding::Spog,
-                },
-                second: None,
-            };
+            yield_!(None);
         }
 
         if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
             // println!("OF: rdf::type");
-            let terms = self.type_triples(subject, predicate, object, graph_name);
-            return ChainedDecodingQuadIterator {
-                first: DecodingQuadIterator {
-                    terms,
-                    encoding: QuadEncoding::Spog,
-                },
-                second: None,
-            };
+            self.type_triples(subject, predicate, object, graph_name);
         } else if self.is_node_related(predicate) {
             // println!("OF: nodes");
             let terms = self.nodes(subject, predicate, object, graph_name);
@@ -127,7 +118,6 @@ impl StorageGenerator {
                 },
                 second: None,
             };
-
         } else if subject.is_none() && predicate.is_none() && object.is_none() {
             // println!("OF: triple none");
             let mut terms = self.nodes(subject, predicate, object, graph_name);
@@ -146,23 +136,23 @@ impl StorageGenerator {
             // println!("OF: subject some");
             let terms = match self.get_term_type(subject.unwrap()) {
                 Some(SubjectType::NodeIri) => {
-                    let mut terms = self.handle_to_triples(subject.unwrap(), predicate, object, graph_name);
-                    let terms_edge = self.handle_to_edge_triples(subject.unwrap(), predicate, object, graph_name);
+                    let mut terms =
+                        self.handle_to_triples(subject.unwrap(), predicate, object, graph_name);
+                    let terms_edge = self.handle_to_edge_triples(
+                        subject.unwrap(),
+                        predicate,
+                        object,
+                        graph_name,
+                    );
                     terms.extend(terms_edge);
                     terms
-                },
-                Some(SubjectType::PathIri) => {
-                    self.paths(subject, predicate, object, graph_name)
-                },
-                Some(SubjectType::StepIri) => {
-                    self.steps(subject, predicate, object, graph_name)
-                },
+                }
+                Some(SubjectType::PathIri) => self.paths(subject, predicate, object, graph_name),
+                Some(SubjectType::StepIri) => self.steps(subject, predicate, object, graph_name),
                 Some(SubjectType::StepBorderIri) => {
                     self.steps(subject, predicate, object, graph_name)
-                },
-                None => {
-                    Vec::new()
                 }
+                None => Vec::new(),
             };
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -171,7 +161,6 @@ impl StorageGenerator {
                 },
                 second: None,
             };
-
         } else {
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -184,24 +173,23 @@ impl StorageGenerator {
     }
 
     fn get_term_type(&self, term: &EncodedTerm) -> Option<SubjectType> {
-    if let EncodedTerm::NamedNode { iri_id: _, value } = term {
-        let mut parts = value.split("/").collect::<Vec<_>>();
-        parts.reverse();
-        if parts[1] == "node" {
-            return Some(SubjectType::NodeIri);
-        } else if parts[3] == "path" && parts[1] == "step" {
-            return Some(SubjectType::StepIri);
-        } else if parts[3] == "path" && parts[1] == "position" {
-            return Some(SubjectType::StepBorderIri);
-        } else if parts[1] == "path" {
-            return Some(SubjectType::PathIri);
+        if let EncodedTerm::NamedNode { iri_id: _, value } = term {
+            let mut parts = value.split("/").collect::<Vec<_>>();
+            parts.reverse();
+            if parts[1] == "node" {
+                return Some(SubjectType::NodeIri);
+            } else if parts[3] == "path" && parts[1] == "step" {
+                return Some(SubjectType::StepIri);
+            } else if parts[3] == "path" && parts[1] == "position" {
+                return Some(SubjectType::StepBorderIri);
+            } else if parts[1] == "path" {
+                return Some(SubjectType::PathIri);
+            } else {
+                return None;
+            }
         } else {
-            return None;
+            None
         }
-    } else {
-        None
-    }
-
     }
 
     fn type_triples(
@@ -210,7 +198,7 @@ impl StorageGenerator {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
-        ) -> Vec<EncodedQuad> {
+    ) -> Vec<EncodedQuad> {
         if self.is_vocab(object, vg::NODE) {
             self.nodes(subject, predicate, object, graph_name)
         } else if self.is_vocab(object, vg::PATH) {
@@ -228,59 +216,69 @@ impl StorageGenerator {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
-    ) -> Vec<EncodedQuad> {
-        let mut results = Vec::new();
-        match subject {
-            Some(sub) => {
-                let is_node_iri = self.is_node_iri_in_graph(sub);
-                if self.is_vocab(predicate, rdf::TYPE)
-                    && (self.is_vocab(object, vg::NODE) || object.is_none())
-                    && is_node_iri
-                {
-                    // println!("NF: type predicate");
-                    results.push(EncodedQuad::new(
-                        sub.clone(),
-                        rdf::TYPE.into(),
-                        vg::NODE.into(),
-                        graph_name.clone(),
-                    ));
-                } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri {
-                    // println!("NF: node object");
-                    results.push(EncodedQuad::new(
-                        sub.clone(),
-                        rdf::TYPE.into(),
-                        vg::NODE.into(),
-                        graph_name.clone(),
-                    ));
-                } else if predicate.is_none() && is_node_iri {
-                    // println!("NF: none predicate");
-                    results.push(EncodedQuad::new(
-                        sub.clone(),
-                        rdf::TYPE.into(),
-                        vg::NODE.into(),
-                        graph_name.clone(),
-                    ));
-                }
+    ) -> Gen<EncodedQuad, (), impl Future<Output = ()>> {
+        gen!({
+            match subject {
+                Some(sub) => {
+                    let is_node_iri = self.is_node_iri_in_graph(sub);
+                    if self.is_vocab(predicate, rdf::TYPE)
+                        && (self.is_vocab(object, vg::NODE) || object.is_none())
+                        && is_node_iri
+                    {
+                        // println!("NF: type predicate");
+                        yield_!(EncodedQuad::new(
+                            sub.clone(),
+                            rdf::TYPE.into(),
+                            vg::NODE.into(),
+                            graph_name.clone(),
+                        ));
+                    } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri
+                    {
+                        // println!("NF: node object");
+                        yield_!(EncodedQuad::new(
+                            sub.clone(),
+                            rdf::TYPE.into(),
+                            vg::NODE.into(),
+                            graph_name.clone(),
+                        ));
+                    } else if predicate.is_none() && is_node_iri {
+                        // println!("NF: none predicate");
+                        yield_!(EncodedQuad::new(
+                            sub.clone(),
+                            rdf::TYPE.into(),
+                            vg::NODE.into(),
+                            graph_name.clone(),
+                        ));
+                    }
 
-                if is_node_iri {
-                    // println!("NF: is_node_iri");
-                    let mut triples = self.handle_to_triples(sub, predicate, object, graph_name);
-                    let mut edge_triples =
-                        self.handle_to_edge_triples(sub, predicate, object, graph_name);
-                    results.append(&mut triples);
-                    results.append(&mut edge_triples);
+                    if is_node_iri {
+                        // println!("NF: is_node_iri");
+                        for triple in self
+                            .handle_to_triples(sub, predicate, object, graph_name)
+                            .chain(self.handle_to_edge_triples(sub, predicate, object, graph_name))
+                        {
+                            yield_!(triple);
+                        }
+                    }
+                }
+                None => {
+                    for triple in self
+                        .storage
+                        .graph
+                        .handles()
+                        .map(|handle| {
+                            let term = self
+                                .handle_to_namednode(handle)
+                                .expect("Can turn handle to namednode");
+                            self.nodes(Some(&term), predicate, object, graph_name)
+                        })
+                        .flatten()
+                    {
+                        yield_!(triple);
+                    }
                 }
             }
-            None => {
-                return self.storage.graph.handles().par_bridge().map(|handle| {
-                     let term = self
-                         .handle_to_namednode(handle)
-                         .expect("Can turn handle to namednode");
-                    self.nodes(Some(&term), predicate, object, graph_name)
-                }).flatten().collect();
-            }
-        }
-        results
+        })
     }
 
     fn paths(
@@ -289,49 +287,38 @@ impl StorageGenerator {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: &EncodedTerm,
-    ) -> Vec<EncodedQuad> {
-        self.storage.graph.path_ids().par_bridge().map(|path_id| {
-            let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
-                return None;
-            };
-            let path_name = path_name.collect::<Vec<_>>();
-            let path_name = str::from_utf8(&path_name).unwrap();
-            let path_node = self.path_to_namednode(path_name);
-            if subject.is_none() || path_node.as_ref() == subject {
-                if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
-                    && (object.is_none() || self.is_vocab(object, vg::PATH))
-                {
-                    return Some(EncodedQuad::new(
-                        path_node.unwrap(),
-                        rdf::TYPE.into(),
-                        vg::PATH.into(),
-                        graph_name.clone(),
-                    ));
-                }
+    ) -> Gen<EncodedQuad, (), impl Future<Output = ()>> {
+        gen!({
+            for triple in self
+                .storage
+                .graph
+                .path_ids()
+                .map(|path_id| {
+                    let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
+                        return None;
+                    };
+                    let path_name = path_name.collect::<Vec<_>>();
+                    let path_name = str::from_utf8(&path_name).unwrap();
+                    let path_node = self.path_to_namednode(path_name);
+                    if subject.is_none() || path_node.as_ref() == subject {
+                        if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
+                            && (object.is_none() || self.is_vocab(object, vg::PATH))
+                        {
+                            return Some(EncodedQuad::new(
+                                path_node.unwrap(),
+                                rdf::TYPE.into(),
+                                vg::PATH.into(),
+                                graph_name.clone(),
+                            ));
+                        }
+                    }
+                    None
+                })
+                .flatten()
+            {
+                yield_!(triple);
             }
-            None
-        }).flatten().collect()
-        // for path_id in self.storage.graph.path_ids() {
-        //     let Some(path_name) = self.storage.graph.get_path_name(path_id) else {
-        //         continue;
-        //     };
-        //     let path_name = path_name.collect::<Vec<_>>();
-        //     let path_name = str::from_utf8(&path_name).unwrap();
-        //     let path_node = self.path_to_namednode(path_name);
-        //     if subject.is_none() || path_node.as_ref() == subject {
-        //         if (predicate.is_none() || self.is_vocab(predicate, rdf::TYPE))
-        //             && (object.is_none() || self.is_vocab(object, vg::PATH))
-        //         {
-        //             results.push(EncodedQuad::new(
-        //                 path_node.unwrap(),
-        //                 rdf::TYPE.into(),
-        //                 vg::PATH.into(),
-        //                 graph_name.clone(),
-        //             ));
-        //         }
-        //     }
-        // }
-        // results
+        })
     }
 
     fn steps(
@@ -343,37 +330,22 @@ impl StorageGenerator {
     ) -> Vec<EncodedQuad> {
         if subject.is_none() {
             // println!("SF: none subject");
-            self.storage.graph.path_ids().par_bridge().map(|path_id| {
-                if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
-                    let mut intermediate_results = Vec::new();
-                    let path_name = self.get_path_name(path_id).unwrap();
-                    let mut rank = 1;
-                    let mut position = 1;
-                    let step_handle = path_ref.step_at(path_ref.first_step());
-                    if step_handle.is_none() {
-                        return Vec::new();
-                    }
-                    let mut step_handle = step_handle.unwrap();
-                    let mut node_handle = step_handle.handle();
-                    let mut triples = self.step_handle_to_triples(
-                        &path_name,
-                        subject,
-                        predicate,
-                        object,
-                        graph_name,
-                        node_handle,
-                        Some(rank),
-                        Some(position),
-                    );
-                    intermediate_results.append(&mut triples);
-
-                    let steps = self.storage.graph.path_steps(path_id).expect("Path has steps");
-                    // TODO: for: does this make sense to be parallelized?
-                    for _ in steps.skip(1) {
-                        step_handle = path_ref.next_step(step_handle.0).unwrap();
-                        position += self.storage.graph.node_len(node_handle);
-                        node_handle = step_handle.handle();
-                        rank += 1;
+            self.storage
+                .graph
+                .path_ids()
+                .par_bridge()
+                .map(|path_id| {
+                    if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
+                        let mut intermediate_results = Vec::new();
+                        let path_name = self.get_path_name(path_id).unwrap();
+                        let mut rank = 1;
+                        let mut position = 1;
+                        let step_handle = path_ref.step_at(path_ref.first_step());
+                        if step_handle.is_none() {
+                            return Vec::new();
+                        }
+                        let mut step_handle = step_handle.unwrap();
+                        let mut node_handle = step_handle.handle();
                         let mut triples = self.step_handle_to_triples(
                             &path_name,
                             subject,
@@ -383,14 +355,39 @@ impl StorageGenerator {
                             node_handle,
                             Some(rank),
                             Some(position),
-                            );
+                        );
                         intermediate_results.append(&mut triples);
+
+                        let steps = self
+                            .storage
+                            .graph
+                            .path_steps(path_id)
+                            .expect("Path has steps");
+                        // TODO: for: does this make sense to be parallelized?
+                        for _ in steps.skip(1) {
+                            step_handle = path_ref.next_step(step_handle.0).unwrap();
+                            position += self.storage.graph.node_len(node_handle);
+                            node_handle = step_handle.handle();
+                            rank += 1;
+                            let mut triples = self.step_handle_to_triples(
+                                &path_name,
+                                subject,
+                                predicate,
+                                object,
+                                graph_name,
+                                node_handle,
+                                Some(rank),
+                                Some(position),
+                            );
+                            intermediate_results.append(&mut triples);
+                        }
+                        intermediate_results
+                    } else {
+                        Vec::new()
                     }
-                    intermediate_results
-                } else {
-                    Vec::new()
-                }
-            }).flatten().collect()
+                })
+                .flatten()
+                .collect()
         } else if let Some(step_type) = self.get_step_iri_fields(subject) {
             // println!("SF: some subject");
             match step_type {
@@ -476,17 +473,19 @@ impl StorageGenerator {
                 "step" => {
                     let step_idx = value.rfind("step").expect("Should contain step");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
-                    let path_text = &value[start..step_idx-1].replace("/", "#");
+                    let path_text = &value[start..step_idx - 1].replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
                     println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
-                    Some(StepType::Rank(path_name, parts[0].parse().ok()?))},
+                    Some(StepType::Rank(path_name, parts[0].parse().ok()?))
+                }
                 "position" => {
                     let pos_idx = value.rfind("position").expect("Should contain position");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
-                    let path_text = &value[start..pos_idx-1].replace("/", "#");
+                    let path_text = &value[start..pos_idx - 1].replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
                     println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
-                    Some(StepType::Position(path_name, parts[0].parse().ok()?))},
+                    Some(StepType::Position(path_name, parts[0].parse().ok()?))
+                }
                 _ => None,
             }
         } else {
@@ -703,9 +702,8 @@ impl StorageGenerator {
                 graph_name.clone(),
             ));
         }
-        if (predicate.is_none()
-            || self.is_vocab(predicate, faldo::REFERENCE))
-                && (object.is_none() || object.unwrap().clone() == path_iri)
+        if (predicate.is_none() || self.is_vocab(predicate, faldo::REFERENCE))
+            && (object.is_none() || object.unwrap().clone() == path_iri)
         {
             results.push(EncodedQuad::new(
                 subject.unwrap(),
@@ -770,18 +768,22 @@ impl StorageGenerator {
                 Orientation::Forward,
             );
             let neighbors = self.storage.graph.neighbors(handle, Direction::Right);
-            neighbors.par_bridge().map(|neighbor| {
-                if object.is_none()
-                    || self
-                        .get_node_id(object.unwrap())
-                        .expect("Object has node id")
-                        == neighbor.unpack_number()
-                {
-                    self.generate_edge_triples(handle, neighbor, predicate, graph_name)
-                } else {
-                    Vec::new()
-                }
-            }).flatten().collect()
+            neighbors
+                .par_bridge()
+                .map(|neighbor| {
+                    if object.is_none()
+                        || self
+                            .get_node_id(object.unwrap())
+                            .expect("Object has node id")
+                            == neighbor.unpack_number()
+                    {
+                        self.generate_edge_triples(handle, neighbor, predicate, graph_name)
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .flatten()
+                .collect()
         } else {
             Vec::new()
         }
@@ -920,7 +922,6 @@ impl StorageGenerator {
             .map(|x| self.is_vocab(object, x))
             .reduce(|acc, x| acc || x)
             .unwrap()
-
     }
 
     fn is_step_associated(&self, predicate: Option<&EncodedTerm>) -> bool {
@@ -1150,12 +1151,7 @@ mod tests {
     #[test]
     fn test_single_node_type_s() {
         let gen = get_odgi_test_file_generator("t_red.gfa");
-        let node_triple = gen.nodes(
-            Some(&get_node(1)),
-            None,
-            None,
-            &EncodedTerm::DefaultGraph,
-        );
+        let node_triple = gen.nodes(Some(&get_node(1)), None, None, &EncodedTerm::DefaultGraph);
         let node_id_quad = EncodedQuad::new(
             get_node(1),
             rdf::TYPE.into(),
@@ -1268,7 +1264,12 @@ mod tests {
     #[test]
     fn test_step_s() {
         let gen = get_odgi_test_file_generator("t_step.gfa");
-        let step_triples = gen.steps(Some(&get_step("x#a", 1)), None, None, &EncodedTerm::DefaultGraph);
+        let step_triples = gen.steps(
+            Some(&get_step("x#a", 1)),
+            None,
+            None,
+            &EncodedTerm::DefaultGraph,
+        );
         for triple in &step_triples {
             print_quad(triple);
         }
@@ -1278,7 +1279,12 @@ mod tests {
     #[test]
     fn test_step_p() {
         let gen = get_odgi_test_file_generator("t_step.gfa");
-        let step_triples = gen.steps(None, Some(&rdf::TYPE.into()), None, &EncodedTerm::DefaultGraph);
+        let step_triples = gen.steps(
+            None,
+            Some(&rdf::TYPE.into()),
+            None,
+            &EncodedTerm::DefaultGraph,
+        );
         for triple in &step_triples {
             print_quad(triple);
         }
@@ -1298,7 +1304,12 @@ mod tests {
     #[test]
     fn test_step_node() {
         let gen = get_odgi_test_file_generator("t.gfa");
-        let step_triples = gen.steps(None, Some(&vg::NODE_PRED.into()), None, &EncodedTerm::DefaultGraph);
+        let step_triples = gen.steps(
+            None,
+            Some(&vg::NODE_PRED.into()),
+            None,
+            &EncodedTerm::DefaultGraph,
+        );
         for triple in &step_triples {
             print_quad(triple);
         }
@@ -1307,7 +1318,7 @@ mod tests {
             vg::NODE_PRED.into(),
             get_node(9),
             EncodedTerm::DefaultGraph,
-            );
+        );
         assert_eq!(step_triples.len(), 10, "Number of node_pred triples");
         assert!(step_triples.contains(&quad));
     }
@@ -1316,7 +1327,12 @@ mod tests {
     fn test_paths() {
         let gen = get_odgi_test_file_generator("t.gfa");
         let generic_triples = gen.paths(None, None, None, &EncodedTerm::DefaultGraph);
-        let specific_triples = gen.paths(Some(&get_path("x#a")), Some(&rdf::TYPE.into()), Some(&vg::PATH.into()), &EncodedTerm::DefaultGraph);
+        let specific_triples = gen.paths(
+            Some(&get_path("x#a")),
+            Some(&rdf::TYPE.into()),
+            Some(&vg::PATH.into()),
+            &EncodedTerm::DefaultGraph,
+        );
         for triple in &generic_triples {
             print_quad(triple)
         }
@@ -1325,7 +1341,7 @@ mod tests {
             rdf::TYPE.into(),
             vg::PATH.into(),
             EncodedTerm::DefaultGraph,
-            );
+        );
         assert_eq!(generic_triples, specific_triples);
         assert_eq!(generic_triples.len(), 1);
         assert!(generic_triples.contains(&quad));
