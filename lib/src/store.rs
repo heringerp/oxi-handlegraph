@@ -1319,12 +1319,12 @@ impl<'a> Transaction<'a> {
 }
 
 /// An iterator returning the quads contained in a [`Store`].
-pub struct QuadIter {
-    iter: ChainedDecodingQuadIterator,
+pub struct QuadIter<'a> {
+    iter: ChainedDecodingQuadIterator<'a>,
     reader: StorageReader,
 }
 
-impl Iterator for QuadIter {
+impl<'a> Iterator for QuadIter<'a> {
     type Item = Result<Quad, StorageError>;
 
     fn next(&mut self) -> Option<Result<Quad, StorageError>> {

@@ -208,7 +208,7 @@ impl StorageReader {
 
     pub fn quads(&self) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(DecodingQuadIterator {
-            terms: Vec::new(),
+            terms: Box::new(Vec::new().into_iter()),
             encoding: QuadEncoding::Spog,
         })
         // ChainedDecodingQuadIterator::pair(self.dspo_quads(&[]), self.gspo_quads(&[]))
@@ -241,12 +241,12 @@ impl StorageReader {
     }
 }
 
-pub struct ChainedDecodingQuadIterator {
-    first: DecodingQuadIterator,
-    second: Option<DecodingQuadIterator>,
+pub struct ChainedDecodingQuadIterator<'a> {
+    first: DecodingQuadIterator<'a>,
+    second: Option<DecodingQuadIterator<'a>>,
 }
 
-impl ChainedDecodingQuadIterator {
+impl<'a> ChainedDecodingQuadIterator<'a> {
     fn new(first: DecodingQuadIterator) -> Self {
         Self {
             first,
@@ -262,7 +262,7 @@ impl ChainedDecodingQuadIterator {
     }
 }
 
-impl Iterator for ChainedDecodingQuadIterator {
+impl<'a> Iterator for ChainedDecodingQuadIterator<'a> {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
@@ -276,12 +276,12 @@ impl Iterator for ChainedDecodingQuadIterator {
     }
 }
 
-pub struct DecodingQuadIterator {
-    terms: Vec<EncodedQuad>,
+pub struct DecodingQuadIterator<'a> {
+    terms: Box<dyn Iterator<Item = EncodedQuad> + 'a>,
     encoding: QuadEncoding,
 }
 
-impl Iterator for DecodingQuadIterator {
+impl<'a> Iterator for DecodingQuadIterator<'a> {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
@@ -290,7 +290,7 @@ impl Iterator for DecodingQuadIterator {
         // }
         // let term = self.encoding.decode(self.iter.key()?);
         // self.iter.next();
-        self.terms.pop().map(|x| Ok(x))
+        self.terms.next().map(|x| Ok(x))
     }
 }
 
