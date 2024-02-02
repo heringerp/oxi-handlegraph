@@ -241,12 +241,12 @@ impl StorageReader {
     }
 }
 
-pub struct ChainedDecodingQuadIterator<'a> {
-    first: DecodingQuadIterator<'a>,
-    second: Option<DecodingQuadIterator<'a>>,
+pub struct ChainedDecodingQuadIterator {
+    first: DecodingQuadIterator,
+    second: Option<DecodingQuadIterator>,
 }
 
-impl<'a> ChainedDecodingQuadIterator<'a> {
+impl ChainedDecodingQuadIterator {
     fn new(first: DecodingQuadIterator) -> Self {
         Self {
             first,
@@ -262,7 +262,7 @@ impl<'a> ChainedDecodingQuadIterator<'a> {
     }
 }
 
-impl<'a> Iterator for ChainedDecodingQuadIterator<'a> {
+impl Iterator for ChainedDecodingQuadIterator {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
@@ -276,12 +276,12 @@ impl<'a> Iterator for ChainedDecodingQuadIterator<'a> {
     }
 }
 
-pub struct DecodingQuadIterator<'a> {
-    terms: Box<dyn Iterator<Item = EncodedQuad> + 'a>,
+pub struct DecodingQuadIterator {
+    terms: Box<dyn Iterator<Item = EncodedQuad>>,
     encoding: QuadEncoding,
 }
 
-impl<'a> Iterator for DecodingQuadIterator<'a> {
+impl Iterator for DecodingQuadIterator {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {

@@ -32,7 +32,7 @@ impl DatasetView {
     }
 
     fn store_encoded_quads_for_pattern(
-        &'static self,
+        &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
@@ -46,7 +46,7 @@ impl DatasetView {
 
     #[allow(clippy::needless_collect)]
     pub fn encoded_quads_for_pattern(
-        &'static self,
+        &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
