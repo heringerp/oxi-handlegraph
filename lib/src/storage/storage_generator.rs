@@ -27,6 +27,7 @@ use handlegraph::{
 use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use rayon::iter::{ParallelBridge, ParallelIterator};
+use core::panic;
 use std::future::Future;
 use std::rc::Rc;
 use std::{iter, str};
@@ -114,13 +115,58 @@ impl StrLookup for StorageGenerator {
     }
 }
 
+#[derive(Clone, Copy)]
+enum IterMode {
+    Uninitialized,
+    Invalid,
+    Type(SubMode),
+    Single(SubMode),
+    All(SubMode),
+}
+
+#[derive(Clone, Copy)]
+enum SubMode {
+    Start,
+    Node(NodeState),
+    Step,
+    Path,
+}
+
+#[derive(Clone, Copy)]
+enum NodeState {
+    Single(NodeTripleState),
+    All(NodeTripleState),
+}
+
+#[derive(Clone, Copy)]
+enum NodeTripleState {
+    Type,
+    Value,
+    Edges,
+}
+
 struct GraphIter {
     storage: Rc<Storage>,
     subject: Option<EncodedTerm>,
     predicate: Option<EncodedTerm>,
     object: Option<EncodedTerm>,
     graph_name: EncodedTerm,
-    iter: Box<dyn Iterator<Item = EncodedQuad>>,
+    mode: IterMode,
+    edges: Option<Box<dyn Iterator<Item = Handle>>>,
+    handles: Option<Box<dyn Iterator<Item = Handle>>>,
+}
+
+impl Iterator for GraphIter {
+    type Item = EncodedQuad;
+
+    fn next(&mut self) -> Option<EncodedQuad> {
+        match self.mode {
+            IterMode::Uninitialized => None,
+            IterMode::Invalid => None,
+            IterMode::Type(sub_mode) => self.type_triples(sub_mode),
+            _ => None,
+        }
+    }
 }
 
 impl GraphIter {
@@ -137,7 +183,9 @@ impl GraphIter {
             predicate: predicate.map(|p| p.to_owned()),
             object: object.map(|o| o.to_owned()),
             graph_name: graph_name.to_owned(),
-            iter: Box::new(iter::empty()),
+            mode: IterMode::Uninitialized,
+            edges: None,
+            handles: None,
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
@@ -145,60 +193,38 @@ impl GraphIter {
     }
 
     fn quads_for_pattern<'a>(&'a mut self) {
-        //println!("C:\t{}\t{}\t{} .", self.term_to_text(subject), self.term_to_text(predicate), self.term_to_text(self.object));
-
         // There should be no blank nodes in the data
-        let iter = {
-            if self.subject.as_ref().is_some_and(|s| s.is_blank_node())
-                || self.object.as_ref().is_some_and(|o| o.is_blank_node())
-            {
-                println!("OF: blanks");
-                // yield_!(None);
-            }
-
-            if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
-                Box::new(self.type_triples())
-            } else if self.is_node_related() {
-                // println!("OF: nodes");
-                let terms: Box<dyn Iterator<Item = EncodedQuad>> = match self.subject {
-                    Some(_) => Box::new(self.nodes_some(self.subject.as_ref().unwrap())),
-                    None => Box::new(self.nodes_none()),
-                };
-                terms
-            } else if self.is_step_associated() {
-                // println!("OF: steps");
-                let terms = self.steps();
-                Box::new(terms)
-            } else if self.is_vocab(self.predicate.as_ref(), rdfs::LABEL) {
-                // println!("OF: rdfs::label");
-                let terms = self.paths();
-                Box::new(terms)
-            } else if self.subject.is_none() && self.predicate.is_none() && self.object.is_none() {
-                // println!("OF: triple none");
-                let mut terms = self.nodes_none();
-                let terms_paths = self.paths();
-                let terms_steps = self.steps();
-                Box::new(terms.chain(terms_paths).chain(terms_steps))
-            } else if self.subject.is_some() {
-                // println!("OF: self.subject some");
-                let terms: Box<dyn Iterator<Item = EncodedQuad>> =
-                    match self.get_term_type(self.subject.as_ref().unwrap()) {
-                        Some(SubjectType::NodeIri) => {
-                            let mut terms = self.handle_to_triples();
-                            let terms_edge = self.handle_to_edge_triples();
-                            Box::new(terms.chain(terms_edge))
-                        }
-                        Some(SubjectType::PathIri) => Box::new(self.paths()),
-                        Some(SubjectType::StepIri) => Box::new(self.steps()),
-                        Some(SubjectType::StepBorderIri) => Box::new(self.steps()),
-                        None => Box::new(Vec::new().into_iter()),
-                    };
-                terms
-            } else {
-                Box::new(iter::empty())
-            }
-        };
-        self.iter = iter;
+        if self.subject.as_ref().is_some_and(|s| s.is_blank_node())
+            || self.object.as_ref().is_some_and(|o| o.is_blank_node())
+        {
+            println!("OF: blanks");
+            self.mode = IterMode::Invalid;
+        } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
+            self.mode = IterMode::Type(SubMode::Start);
+        } else if self.is_node_related() {
+            // println!("OF: nodes");
+            self.mode = IterMode::Single(SubMode::Node(NodeState::Start));
+        } else if self.is_step_associated() {
+            // println!("OF: steps");
+            self.mode = IterMode::Single(SubMode::Step);
+        } else if self.is_vocab(self.predicate.as_ref(), rdfs::LABEL) {
+            // println!("OF: rdfs::label");
+            self.mode = IterMode::Single(SubMode::Path);
+        } else if self.subject.is_none() && self.predicate.is_none() && self.object.is_none() {
+            // println!("OF: triple none");
+            self.mode = IterMode::All(SubMode::Start);
+        } else if self.subject.is_some() {
+            // println!("OF: self.subject some");
+            self.mode = match self.get_term_type(self.subject.as_ref().unwrap()) {
+                Some(SubjectType::NodeIri) => IterMode::Single(SubMode::Node(NodeState::Start)), // TODO: is this correct?
+                Some(SubjectType::PathIri) => IterMode::Single(SubMode::Path),
+                Some(SubjectType::StepIri) => IterMode::Single(SubMode::Step),
+                Some(SubjectType::StepBorderIri) => IterMode::Single(SubMode::Step),
+                None => IterMode::Invalid,
+            };
+        } else {
+            self.mode = IterMode::Invalid;
+        }
     }
 
     fn get_term_type(&self, term: &EncodedTerm) -> Option<SubjectType> {
@@ -221,98 +247,104 @@ impl GraphIter {
         }
     }
 
-    fn type_triples<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({
-            if self.is_vocab(self.object.as_ref(), vg::NODE) {
-                match self.subject {
-                    Some(_) => {
-                        for triple in self.nodes_some(self.subject.as_ref().unwrap()) {
-                            yield_!(triple);
-                        }
+    fn type_triples(&mut self, sub_mode: SubMode) -> Option<EncodedQuad> {
+        match sub_mode {
+            SubMode::Start => {
+                let sm = if self.is_vocab(self.object.as_ref(), vg::NODE) {
+                    match self.subject {
+                        Some(_) => SubMode::Node(NodeState::Single(NodeTripleState::Type)),
+                        None => SubMode::Node(NodeState::All(NodeTripleState::Type)),
                     }
-                    None => {
-                        for triple in self.nodes_none() {
-                            yield_!(triple);
-                        }
-                    }
-                }
-            } else if self.is_vocab(self.object.as_ref(), vg::PATH) {
-                for triple in self.paths() {
-                    yield_!(triple);
-                }
-            } else if self.is_step_associated_type() {
-                for triple in self.steps() {
-                    yield_!(triple);
-                }
+                } else if self.is_vocab(self.object.as_ref(), vg::PATH) {
+                    SubMode::Path
+                } else if self.is_step_associated_type() {
+                    SubMode::Step
+                } else {
+                    panic!("There should always be a type submode!");
+                };
+                self.mode = IterMode::Type(sm);
+                self.type_triples(sm)
+            },
+            SubMode::Node(nts) => {
+                self.nodes()
             }
-        })
-        .into_iter()
+            _ => None,
+        }
     }
 
     fn empty_gen<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
         gen!({}).into_iter()
     }
 
-    fn nodes_some<'a>(&'a self, sub: &'a EncodedTerm) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({
-            let is_node_iri = self.is_node_iri_in_graph(sub);
-            if self.is_vocab(self.predicate.as_ref(), rdf::TYPE)
-                && (self.is_vocab(self.object.as_ref(), vg::NODE) || self.object.is_none())
-                && is_node_iri
-            {
-                // println!("NF: type self.predicate");
-                yield_!(EncodedQuad::new(
-                    sub.clone(),
-                    rdf::TYPE.into(),
-                    vg::NODE.into(),
-                    self.graph_name.clone(),
-                ));
-            } else if self.predicate.is_none()
-                && self.is_vocab(self.object.as_ref(), vg::NODE)
-                && is_node_iri
-            {
-                // println!("NF: node self.object");
-                yield_!(EncodedQuad::new(
-                    sub.clone(),
-                    rdf::TYPE.into(),
-                    vg::NODE.into(),
-                    self.graph_name.clone(),
-                ));
-            } else if self.predicate.is_none() && is_node_iri {
-                // println!("NF: none self.predicate");
-                yield_!(EncodedQuad::new(
-                    sub.clone(),
-                    rdf::TYPE.into(),
-                    vg::NODE.into(),
-                    self.graph_name.clone(),
-                ));
-            }
+    fn nodes(&mut self) -> Option<EncodedQuad> {
+        let (triple, sm) = match self.mode {
+            IterMode::Single(SubMode::Node(node_state)) | IterMode::All(SubMode::Node(node_state)) | IterMode::Type(SubMode::Node(node_state)) => {
+                match node_state {
+                    NodeState::Single(nts) => {
+                        let handle = self.get_node_id(term)
+                        let (triple, nnts) = self.node_triple(handle, nts);
+                    }
+                    NodeState::All(nts) => {
 
-            if is_node_iri {
-                // println!("NF: is_node_iri");
-                for triple in self
-                    .handle_to_triples()
-                    .chain(self.handle_to_edge_triples())
-                {
-                    yield_!(triple);
+                    }
                 }
-            }
-        })
-        .into_iter()
+
+            },
+            _ => None,
+        };
+        triple
     }
 
-    fn nodes_none<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({
-            for handle in self.storage.graph.handles() {
-                let term = self
-                    .handle_to_namednode(handle)
-                    .expect("Can turn handle to namednode");
-                for triple in self.nodes_some(&term) {
-                    yield_!(triple)
+    fn node_triple(&mut self, handle: Handle, nts: NodeTripleState) -> (Option<EncodedQuad>, NodeTripleState) {
+        let sub = self.handle_to_namednode(handle).expect("Should be fine");
+        match nts {
+            NodeTripleState::Type => {
+                let nts = NodeTripleState::Value;
+                if self.is_vocab(self.predicate.as_ref(), rdf::TYPE)
+                    && (self.is_vocab(self.object.as_ref(), vg::NODE) || self.object.is_none())
+                {
+                    // println!("NF: type self.predicate");
+                    (Some(EncodedQuad::new(
+                        sub,
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        self.graph_name.clone(),
+                    )), nts)
+                } else if self.predicate.is_none()
+                    && self.is_vocab(self.object.as_ref(), vg::NODE)
+                {
+                    // println!("NF: node self.object");
+                    (Some(EncodedQuad::new(
+                        sub,
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        self.graph_name.clone(),
+                    )), nts)
+                } else if self.predicate.is_none() {
+                    // println!("NF: none self.predicate");
+                    (Some(EncodedQuad::new(
+                        sub,
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        self.graph_name.clone(),
+                    )), nts)
+                } else {
+                    self.node_triple(handle, nts)
                 }
+            },
+            NodeTripleState::Value => {
+                let nts = NodeTripleState::Edges;
+                if let Some(value_triple) = self.handle_to_triples(handle) {
+                    (Some(value_triple), nts)
+                } else {
+                    self.node_triple(handle, nts)
+                }
+            },
+            NodeTripleState::Edges => {
+                (self.handle_to_edge_triples(handle), NodeTripleState::Edges)
             }
-        })
-        .into_iter()
+        }
+
     }
 
     fn paths<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
@@ -762,56 +794,49 @@ impl GraphIter {
         .into_iter()
     }
 
-    fn handle_to_triples<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({
-            if self.is_vocab(self.predicate.as_ref(), rdf::VALUE) || self.predicate.is_none() {
-                let handle = Handle::new(
-                    self.get_node_id(self.subject.as_ref().unwrap())
-                        .expect("Subject is node"),
-                    Orientation::Forward,
-                );
-                let seq_bytes = self.storage.graph.sequence_vec(handle);
-                let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
-                let seq_value = Literal::new_simple_literal(seq);
-                if self.object.is_none()
-                    || self.decode_term(self.object.as_ref().unwrap()).unwrap()
-                        == Term::Literal(seq_value.clone())
-                {
-                    yield_!(EncodedQuad::new(
-                        self.subject.clone().unwrap(),
-                        rdf::VALUE.into(),
-                        seq_value.as_ref().into(),
-                        self.graph_name.clone(),
-                    ));
-                }
+    fn handle_to_triples(&self, handle: Handle) -> Option<EncodedQuad> {
+        if self.is_vocab(self.predicate.as_ref(), rdf::VALUE) || self.predicate.is_none() {
+            let seq_bytes = self.storage.graph.sequence_vec(handle);
+            let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
+            let seq_value = Literal::new_simple_literal(seq);
+            if self.object.is_none()
+                || self.decode_term(self.object.as_ref().unwrap()).unwrap()
+                    == Term::Literal(seq_value.clone())
+            {
+                Some(EncodedQuad::new(
+                    self.handle_to_namednode(handle).unwrap(),
+                    rdf::VALUE.into(),
+                    seq_value.as_ref().into(),
+                    self.graph_name.clone(),
+                ))
+            } else {
+                None
             }
-        })
-        .into_iter()
+        } else {
+            None
+        }
     }
 
-    fn handle_to_edge_triples<'a>(&'a self) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({
-            if self.predicate.is_none() || self.is_node_related() {
-                let handle = Handle::new(
-                    self.get_node_id(self.subject.as_ref().unwrap())
-                        .expect("Subject has node id"),
-                    Orientation::Forward,
-                );
-                for neighbor in self.storage.graph.neighbors(handle, Direction::Right) {
-                    if self.object.is_none()
-                        || self
-                            .get_node_id(self.object.as_ref().unwrap())
-                            .expect("Object has node id")
-                            == neighbor.unpack_number()
-                    {
-                        for triple in self.generate_edge_triples(handle, neighbor) {
-                            yield_!(triple);
-                        }
-                    }
-                }
+    fn handle_to_edge_triples(&mut self, handle: Handle) -> Option<EncodedQuad> {
+        if self.predicate.is_none() || self.is_node_related() {
+            let neighbor = self.edges.expect("Should_exist").next()?;
+            if self.object.is_none()
+                || self
+                    .get_node_id(self.object.as_ref().unwrap())
+                    .expect("Object has node id")
+                    == neighbor.unpack_number()
+            {
+                Some(EncodedQuad::new(
+                        self.handle_to_namednode(handle).unwrap(),
+                        vg::LINKS.into(),
+                        self.handle_to_namednode(neighbor).unwrap(),
+                        self.graph_name.clone(),))
+            } else {
+                self.handle_to_edge_triples(handle)
             }
-        })
-        .into_iter()
+        } else {
+            None
+        }
     }
 
     fn generate_edge_triples<'a>(
@@ -1027,14 +1052,6 @@ impl GraphIter {
     #[cfg(not(target_family = "wasm"))]
     pub fn contains_str(&self, _key: &StrHash) -> Result<bool, StorageError> {
         Ok(true)
-    }
-}
-
-impl Iterator for GraphIter {
-    type Item = EncodedQuad;
-
-    fn next(&mut self) -> Option<EncodedQuad> {
-        self.iter.next()
     }
 }
 
