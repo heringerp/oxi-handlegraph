@@ -11,6 +11,7 @@ use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm};
 use crate::storage::vg_vocab::{faldo, vg};
 use crate::storage::DecodingQuadIterator;
 use core::panic;
+use std::vec::IntoIter;
 use genawaiter::{
     rc::{gen, Gen},
     yield_,
@@ -119,62 +120,64 @@ impl StrLookup for StorageGenerator {
 enum IterMode {
     Uninitialized,
     Invalid,
-    Type(SubMode),
-    Single(SubMode),
-    All(SubMode),
+    Type,
+    Single,
+    All,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum SubMode {
     Start,
-    Node(NodeState),
+    SingleNode(NodeTripleState),
+    AllNodes(NodeTripleState, IntoIter<Handle>),
     Step,
     Path,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum NodeState {
-    Single(NodeTripleState),
-    All(NodeTripleState),
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum NodeTripleState {
     Type,
     Value,
-    Edges,
+    Edges(IntoIter<Handle>),
 }
 
-struct GraphIter<'a> {
+struct GraphIter {
     storage: Rc<Storage>,
     subject: Option<EncodedTerm>,
     predicate: Option<EncodedTerm>,
     object: Option<EncodedTerm>,
     graph_name: EncodedTerm,
     mode: IterMode,
-    edges: Option<Box<dyn Iterator<Item = Handle>>>,
-    handles: Option<Box<dyn Iterator<Item = Handle> + 'a>>,
+    sub_mode: SubMode,
 }
 
-impl<'a> Iterator for GraphIter<'a> {
+impl Iterator for GraphIter {
     type Item = EncodedQuad;
 
     fn next(&mut self) -> Option<EncodedQuad> {
         match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
-            IterMode::Type(sub_mode) => self.type_triples(sub_mode),
-            IterMode::All(SubMode::Start) => {
-                self.mode = IterMode::All(SubMode::Node(NodeState::All(NodeTripleState::Type)));
-                self.handles = Some(Box::new(self.storage.graph.handles()));
-                self.nodes()
+            IterMode::Type => self.type_triples(),
+            IterMode::All => {
+                match self.sub_mode {
+                    SubMode::Start => {
+                        if self.subject.is_some() {
+                            self.sub_mode = SubMode::SingleNode(NodeTripleState::Type);
+                        } else {
+                            self.sub_mode = SubMode::AllNodes(NodeTripleState::Type, self.storage.graph.handles().collect::<Vec<_>>().into_iter());
+                        }
+                        None
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }
     }
 }
 
-impl<'a> GraphIter<'a> {
+impl GraphIter {
     pub fn new(
         storage: Rc<Storage>,
         subject: Option<&EncodedTerm>,
@@ -189,8 +192,7 @@ impl<'a> GraphIter<'a> {
             object: object.map(|o| o.to_owned()),
             graph_name: graph_name.to_owned(),
             mode: IterMode::Uninitialized,
-            edges: None,
-            handles: None,
+            sub_mode: SubMode::Start,
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
@@ -210,10 +212,11 @@ impl<'a> GraphIter<'a> {
         } else if self.is_node_related() {
             // println!("OF: nodes");
             if self.subject.is_some() {
-                self.mode =
-                    IterMode::Single(SubMode::Node(NodeState::Single(NodeTripleState::Type)));
+                self.mode = IterMode::Single;
+                self.sub_mode = SubMode::Node(NodeTripleState::Type);
             } else {
-                self.mode = IterMode::Single(SubMode::Node(NodeState::All(NodeTripleState::Type)));
+                self.mode = IterMode::Single;
+                self.sub_mode = SubMode::Node(NodeTripleState::Type);
             }
         } else if self.is_step_associated() {
             // println!("OF: steps");
@@ -226,13 +229,14 @@ impl<'a> GraphIter<'a> {
             self.mode = IterMode::All(SubMode::Start);
         } else if self.subject.is_some() {
             // println!("OF: self.subject some");
-            self.mode = match self.get_term_type(self.subject.as_ref().unwrap()) {
+            self.mode = IterMode::Single;
+            self.sub_mode = match self.get_term_type(self.subject.as_ref().unwrap()) {
                 Some(SubjectType::NodeIri) => {
-                    IterMode::Single(SubMode::Node(NodeState::Single(NodeTripleState::Type)))
+                    SubMode::SingleNode(NodeTripleState::Type)
                 } // TODO: is this correct?
-                Some(SubjectType::PathIri) => IterMode::Single(SubMode::Path),
-                Some(SubjectType::StepIri) => IterMode::Single(SubMode::Step),
-                Some(SubjectType::StepBorderIri) => IterMode::Single(SubMode::Step),
+                Some(SubjectType::PathIri) => SubMode::Path,
+                Some(SubjectType::StepIri) => SubMode::Step,
+                Some(SubjectType::StepBorderIri) => SubMode::Step,
                 None => IterMode::Invalid,
             };
         } else {
@@ -260,13 +264,13 @@ impl<'a> GraphIter<'a> {
         }
     }
 
-    fn type_triples(&mut self, sub_mode: SubMode) -> Option<EncodedQuad> {
-        match sub_mode {
+    fn type_triples(&mut self) -> Option<EncodedQuad> {
+        match self.sub_mode {
             SubMode::Start => {
                 let sm = if self.is_vocab(self.object.as_ref(), vg::NODE) {
                     match self.subject {
-                        Some(_) => SubMode::Node(NodeState::Single(NodeTripleState::Type)),
-                        None => SubMode::Node(NodeState::All(NodeTripleState::Type)),
+                        Some(_) => SubMode::Node(NodeTripleState::Type),
+                        None => SubMode::Node(NodeTripleState::Type),
                     }
                 } else if self.is_vocab(self.object.as_ref(), vg::PATH) {
                     SubMode::Path
@@ -276,48 +280,40 @@ impl<'a> GraphIter<'a> {
                     panic!("There should always be a type submode!");
                 };
                 self.mode = IterMode::Type(sm);
-                self.type_triples(sm)
+                self.type_triples()
             }
             SubMode::Node(nts) => self.nodes(),
             _ => None,
         }
     }
 
-    fn empty_gen(&self) -> impl Iterator<Item = EncodedQuad> + 'a {
-        gen!({}).into_iter()
-    }
-
     fn nodes(&mut self) -> Option<EncodedQuad> {
-        let (triple, sm) = match self.mode {
-            IterMode::Single(SubMode::Node(node_state))
-            | IterMode::All(SubMode::Node(node_state))
-            | IterMode::Type(SubMode::Node(node_state)) => match node_state {
-                NodeState::Single(nts) => {
+        let (triple, sm) = match self.sub_mode {
+                SubMode::SingleNode(nts) => {
                     let handle = Handle::new(
                         self.get_node_id(self.subject.as_ref().unwrap())
                             .expect("Subject is node"),
                         Orientation::Forward,
                     );
                     let (triple, nnts) = self.node_triple(handle, nts);
-                    (triple, NodeState::Single(nnts))
+                    (triple, SubMode::SingleNode(nnts))
                 }
-                NodeState::All(nts) => {
+                SubMode::AllNodes(nts, handles) => {
                     if let Some(handles) = &mut self.handles {
                         if let Some(handle) = handles.next() {
                             if let (triple, nnts) = self.node_triple(handle, nts) {
-                                (triple, NodeState::All(nnts))
+                                (triple, SubMode::AllNodes(nnts, handles))
                             } else {
-                                (self.nodes(), NodeState::All(NodeTripleState::Type))
+                                (self.nodes(), SubMode::AllNodes(NodeTripleState::Type, handles))
                             }
                         } else {
-                            (self.nodes(), NodeState::All(NodeTripleState::Type))
+                            (self.nodes(), SubMode::AllNodes(NodeTripleState::Type, handles))
                         }
                     } else {
                         panic!("For ALL there should always be a handles iterator");
                     }
                 }
-            },
-            _ => (None, NodeState::Single(NodeTripleState::Type)),
+                _ => (None, SubMode::Start)
         };
         triple
     }
@@ -379,7 +375,7 @@ impl<'a> GraphIter<'a> {
                     self.node_triple(handle, nts)
                 }
             }
-            NodeTripleState::Edges => (self.handle_to_edge_triples(handle), NodeTripleState::Edges),
+            NodeTripleState::Edges(_) => (self.handle_to_edge_triples(handle), NodeTripleState::Edges),
         }
     }
 
@@ -1086,7 +1082,7 @@ impl<'a> GraphIter<'a> {
     }
 }
 
-impl<'a> StrLookup for GraphIter<'a> {
+impl StrLookup for GraphIter {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         self.get_str(key)
     }
