@@ -196,7 +196,6 @@ impl Iterator for GraphIter {
         match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
-            IterMode::Type => self.type_triples(),
             IterMode::All => match self.sub_mode {
                 SubMode::Start => {
                     if self.subject.is_some() {
@@ -281,8 +280,8 @@ impl GraphIter {
             println!("OF: blanks");
             self.mode = IterMode::Invalid;
         } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
-            self.mode = IterMode::Type;
-            self.sub_mode = SubMode::Start;
+            self.mode = IterMode::Single;
+            self.type_triples();
         } else if self.is_node_related() {
             println!("OF: nodes");
             if self.subject.is_some() {
@@ -290,8 +289,7 @@ impl GraphIter {
                 self.sub_mode = SubMode::SingleNode(NodeState::Type);
             } else {
                 self.mode = IterMode::Single;
-                self.handles = self.storage.graph.handles().collect::<Vec<_>>().into_iter();
-                self.curr_handle = self.handles.next();
+                self.set_nodes();
                 self.sub_mode = SubMode::AllNodes(NodeState::Type);
             }
         } else if self.is_step_associated() {
@@ -309,8 +307,7 @@ impl GraphIter {
         } else if self.subject.is_none() && self.predicate.is_none() && self.object.is_none() {
             println!("OF: triple none");
             self.mode = IterMode::All;
-            self.handles = self.storage.graph.handles().collect::<Vec<_>>().into_iter();
-            self.curr_handle = self.handles.next();
+            self.set_nodes();
             self.sub_mode = SubMode::AllNodes(NodeState::Type);
         } else if self.subject.is_some() {
             println!("OF: self.subject some");
@@ -338,6 +335,11 @@ impl GraphIter {
         }
     }
 
+    fn set_nodes(&mut self) {
+            self.handles = self.storage.graph.handles().collect::<Vec<_>>().into_iter();
+            self.curr_handle = self.handles.next();
+    }
+
     fn get_term_type(&self, term: &EncodedTerm) -> Option<SubjectType> {
         if let EncodedTerm::NamedNode { iri_id: _, value } = term {
             let mut parts = value.split("/").collect::<Vec<_>>();
@@ -358,28 +360,26 @@ impl GraphIter {
         }
     }
 
-    fn type_triples(&mut self) -> Option<EncodedQuad> {
-        match self.sub_mode {
-            SubMode::Start => {
+    fn type_triples(&mut self) {
                 let sm = if self.is_vocab(self.object.as_ref(), vg::NODE) {
                     match self.subject {
                         Some(_) => SubMode::SingleNode(NodeState::Type),
-                        None => SubMode::AllNodes(NodeState::Type),
+                        None => {
+                            self.set_nodes();
+                            SubMode::AllNodes(NodeState::Type)
+                        },
                     }
                 } else if self.is_vocab(self.object.as_ref(), vg::PATH) {
+                    self.set_paths();
                     SubMode::Path
                 } else if self.is_step_associated_type() {
+                    self.set_paths();
+                    self.set_first_step();
                     SubMode::Step(StepState::TypeStep)
                 } else {
                     panic!("There should always be a type submode!");
                 };
-                self.mode = IterMode::Type;
                 self.sub_mode = sm;
-                self.type_triples()
-            }
-            SubMode::SingleNode(_) | SubMode::AllNodes(_) => self.nodes(),
-            _ => None,
-        }
     }
 
     fn nodes(&mut self) -> Option<EncodedQuad> {
