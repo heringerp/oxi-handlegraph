@@ -267,7 +267,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
+        // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
 
@@ -276,13 +276,13 @@ impl GraphIter {
         if self.subject.as_ref().is_some_and(|s| s.is_blank_node())
             || self.object.as_ref().is_some_and(|o| o.is_blank_node())
         {
-            println!("OF: blanks");
+            // println!("OF: blanks");
             self.mode = IterMode::Invalid;
         } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
             self.mode = IterMode::Single;
             self.type_triples();
         } else if self.is_node_related() {
-            println!("OF: nodes");
+            // println!("OF: nodes");
             if self.subject.is_some() {
                 self.mode = IterMode::Single;
                 self.sub_mode = SubMode::SingleNode(NodeState::Type);
@@ -292,24 +292,24 @@ impl GraphIter {
                 self.sub_mode = SubMode::AllNodes(NodeState::Type);
             }
         } else if self.is_step_associated() {
-            println!("OF: steps");
+            // println!("OF: steps");
             self.mode = IterMode::Single;
             self.set_paths();
             self.set_first_step();
             self.sub_mode = SubMode::Step(StepState::TypeStep);
         } else if self.is_vocab(self.predicate.as_ref(), rdfs::LABEL) {
-            println!("OF: rdfs::label");
+            // println!("OF: rdfs::label");
             self.mode = IterMode::Single;
             self.set_paths();
             self.set_first_step();
             self.sub_mode = SubMode::Step(StepState::TypeStep);
         } else if self.subject.is_none() && self.predicate.is_none() && self.object.is_none() {
-            println!("OF: triple none");
+            // println!("OF: triple none");
             self.mode = IterMode::All;
             self.set_nodes();
             self.sub_mode = SubMode::AllNodes(NodeState::Type);
         } else if self.subject.is_some() {
-            println!("OF: self.subject some");
+            //println!("OF: self.subject some");
             self.mode = IterMode::Single;
             self.sub_mode = match self.get_term_type(self.subject.as_ref().unwrap()) {
                 Some(SubjectType::NodeIri) => SubMode::SingleNode(NodeState::Type), // TODO: is this correct?
@@ -318,7 +318,7 @@ impl GraphIter {
                     SubMode::Path
                 }
                 Some(SubjectType::StepIri) => {
-                    println!("Doing step");
+                    // println!("Doing step");
                     self.set_paths();
                     self.set_first_step();
                     SubMode::Step(StepState::TypeStep)
@@ -652,7 +652,7 @@ impl GraphIter {
             let mut parts = value.split("/").collect::<Vec<_>>();
             parts.reverse();
             if parts.len() < 5 || !parts.contains(&"path") {
-                println!("We are quitting early! {:?}", parts);
+                // println!("We are quitting early! {:?}", parts);
                 return None;
             }
             match parts[1] {
@@ -661,7 +661,7 @@ impl GraphIter {
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
                     let path_text = &value[start..step_idx - 1].replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
-                    println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
+                    // println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
                     Some(StepType::Rank(path_name, parts[0].parse().ok()?))
                 }
                 "position" => {
@@ -669,7 +669,7 @@ impl GraphIter {
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
                     let path_text = &value[start..pos_idx - 1].replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
-                    println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
+                    // println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
                     Some(StepType::Position(path_name, parts[0].parse().ok()?))
                 }
                 _ => None,
@@ -776,10 +776,10 @@ impl GraphIter {
                         let subject = self
                             .get_faldo_border_namednode(position, path_name)
                             .unwrap();
-                        println!("Begin Faldo");
+                        // println!("Begin Faldo");
                         self.faldo_for_step(position, path_iri, &subject)
                             .or_else(|| {
-                                println!("Begin None");
+                                // println!("Begin None");
                                 self.sub_mode =
                                     SubMode::Step(StepState::FaldoEnd(FaldoState::Positon));
                                 self.step_handle_to_triples(path_name, node_handle, rank, position)
@@ -789,10 +789,10 @@ impl GraphIter {
                         let subject = self
                             .get_faldo_border_namednode(position + node_len, path_name)
                             .unwrap();
-                        println!("End Faldo");
+                        // println!("End Faldo");
                         self.faldo_for_step(position + node_len, path_iri, &subject)
                             .or_else(|| {
-                                println!("End None");
+                                // println!("End None");
                                 self.sub_mode = SubMode::Step(StepState::Finished);
                                 None
                             })
