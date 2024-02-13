@@ -119,15 +119,16 @@ impl StrLookup for StorageGenerator {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IterMode {
     Uninitialized,
     Invalid,
     Single,
     All,
+    Finished,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SubMode {
     Start,
     SingleNode(NodeState),
@@ -192,9 +193,11 @@ impl Iterator for GraphIter {
     type Item = EncodedQuad;
 
     fn next(&mut self) -> Option<EncodedQuad> {
+        // println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
         match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
+            IterMode::Finished => None,
             IterMode::All => match self.sub_mode {
                 SubMode::Start => {
                     if self.subject.is_some() {
@@ -267,6 +270,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
+        // println!("\nNew: {:?}, {:?}, {:?}", subject, predicate, object);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -309,7 +313,6 @@ impl GraphIter {
             self.set_nodes();
             self.sub_mode = SubMode::AllNodes(NodeState::Type);
         } else if self.subject.is_some() {
-            //println!("OF: self.subject some");
             self.mode = IterMode::Single;
             self.sub_mode = match self.get_term_type(self.subject.as_ref().unwrap()) {
                 Some(SubjectType::NodeIri) => SubMode::SingleNode(NodeState::Type), // TODO: is this correct?
@@ -558,6 +561,8 @@ impl GraphIter {
                             node_handle = step_handle.handle();
                             rank += 1;
                         }
+                        // println!("First step: {}, {}, {:?}", rank, target_rank, self.get_path_name(id));
+                        self.curr_path = Some(id);
                         self.step = Some(StepInfos(step_handle.0, rank, position));
                     }
                 }
@@ -566,71 +571,118 @@ impl GraphIter {
         }
     }
 
+    fn step_no_subject(&mut self) -> Option<EncodedQuad> {
+        // print!(",");
+        // if self.mode == IterMode::Single && self.sub_mode == SubMode::Step(StepState::NodeReverse) {
+        //     println!(
+        //         "q||| {:?} {:?} {:?}",
+        //         self.subject, self.predicate, self.object
+        //     );
+        // }
+        if let Some(path_id) = self.curr_path {
+            if let Some(StepInfos(step, rank, position)) = self.step {
+                let path_name = self.get_path_name(path_id).unwrap();
+                // print!("576 [ ");
+                let node_handle = self
+                    .storage
+                    .graph
+                    .path_handle_at_step(path_id, step)
+                    .expect("There should always be a node to every step");
+                // println!("] 576");
+                let triple = self.step_handle_to_triples(&path_name, node_handle, rank, position);
+                // println!("");
+                return triple;
+            }
+        }
+        None
+    }
+
     fn steps(&mut self) -> Option<EncodedQuad> {
         if self.subject.is_none() {
             // println!("SF: none self.subject");
-            if let Some(path_id) = self.curr_path {
-                if let Some(StepInfos(step, rank, position)) = self.step {
-                    let path_name = self.get_path_name(path_id).unwrap();
-                    let node_handle = self
-                        .storage
-                        .graph
-                        .path_handle_at_step(path_id, step)
-                        .expect("There should always be a node to every step");
-                    let triple =
-                        self.step_handle_to_triples(&path_name, node_handle, rank, position);
-                    if triple.is_none() {
+            let mut triple = self.step_no_subject();
+            while triple.is_none() {
+                if let Some(path_id) = self.curr_path {
+                    if let Some(StepInfos(step, rank, position)) = self.step {
+                        let node_handle = self
+                            .storage
+                            .graph
+                            .path_handle_at_step(path_id, step)
+                            .expect("There should always be a node to every step");
                         if let Some(next_step) = self.storage.graph.path_next_step(path_id, step) {
+                            // println!("] 586");
+                            // print!("589 [ ");
                             let node_length = self.storage.graph.node_len(node_handle) as u64;
+                            // println!("] 589");
                             self.step =
                                 Some(StepInfos(next_step, rank + 1, position + node_length));
                             self.sub_mode = SubMode::Step(StepState::TypeStep);
                         } else {
                             self.curr_path = self.path_ids.next();
                             if let Some(new_path_id) = self.curr_path {
+                                // print!("598 [ ");
                                 let next = self
                                     .storage
                                     .graph
                                     .path_first_step(new_path_id)
                                     .expect("Every path should have at least one step");
+                                // println!("] 598");
                                 self.step = Some(StepInfos(next, FIRST_RANK, FIRST_POS));
                                 self.sub_mode = SubMode::Step(StepState::TypeStep);
+                            } else {
+                                return None;
                             }
                         }
-                        return self.steps();
+                        triple = self.step_no_subject();
                     }
-                    return triple;
                 }
             }
+            return triple;
         } else if let Some(step_type) = self.get_step_iri_fields() {
             // println!("SF: some self.subject");
+            // print!("|");
             match step_type {
-                StepType::Rank(path_name, target_rank) => {
+                StepType::Rank(path_name, _) => {
                     if let Some(path_id) = self.curr_path {
                         if let Some(StepInfos(step, rank, position)) = self.step {
+                            if path_name == "HG00673#1#JAHBBZ010000052.1" {
+                                // println!("At path: {}, {:?}, {:?}", path_name, self.storage.graph.path_len(path_id), self.get_path_name(path_id));
+                                // println!("At path: {:?}, {}, {}", step, rank, position);
+                            }
+                            // print!("620 [ ");
                             let node_handle = self
                                 .storage
                                 .graph
                                 .path_handle_at_step(path_id, step)
                                 .expect("There should always be a node to every step");
-                            return self.step_handle_to_triples(
+                            // println!("] 620");
+                            let triple = self.step_handle_to_triples(
                                 &path_name,
                                 node_handle,
                                 rank,
                                 position,
                             ); //results.append(&mut triples);
+                            self.mode = IterMode::Finished;
+                            return triple;
                         }
                     }
                 }
                 StepType::Position(path_name, position) => {
                     // println!("POSITION: {}, {}", path_name, position);
+                    // print!("638 [ ");
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
+                        // println!("] 638");
+                        // print!("641 [ ");
                         if let Some(step) =
                             self.storage.graph.path_step_at_base(id, position as usize)
                         {
+                            // println!("] 641");
+                            // print!("645 [ ");
                             let node_handle =
                                 self.storage.graph.path_handle_at_step(id, step).unwrap();
+                            // println!("] 645");
                             let rank = step.pack() + 1;
+                            self.mode = IterMode::Finished;
                             return self.step_handle_to_triples(
                                 &path_name,
                                 node_handle,
@@ -688,9 +740,9 @@ impl GraphIter {
     ) -> Option<EncodedQuad> {
         let step_iri = self.step_to_namednode(path_name, rank).unwrap();
         let node_len = self.storage.graph.node_len(node_handle) as u64;
-        let path_iri = self.path_to_namednode(path_name).unwrap();
         let position_literal = EncodedTerm::IntegerLiteral((position as i64).into());
         // println!("SH");
+        // print!(".");
 
         if self.subject.is_none() || step_iri == self.subject.as_ref().unwrap().clone() {
             if let SubMode::Step(st) = self.sub_mode {
@@ -735,6 +787,7 @@ impl GraphIter {
                     }
                     StepState::Path => {
                         self.sub_mode = SubMode::Step(StepState::Begin);
+                        let path_iri = self.path_to_namednode(path_name).unwrap();
                         self.get_step_path(step_iri, path_iri).or_else(|| {
                             self.step_handle_to_triples(path_name, node_handle, rank, position)
                         })
@@ -776,10 +829,9 @@ impl GraphIter {
                         let subject = self
                             .get_faldo_border_namednode(position, path_name)
                             .unwrap();
-                        // println!("Begin Faldo");
+                        let path_iri = self.path_to_namednode(path_name).unwrap();
                         self.faldo_for_step(position, path_iri, &subject)
                             .or_else(|| {
-                                // println!("Begin None");
                                 self.sub_mode =
                                     SubMode::Step(StepState::FaldoEnd(FaldoState::Positon));
                                 self.step_handle_to_triples(path_name, node_handle, rank, position)
@@ -789,10 +841,9 @@ impl GraphIter {
                         let subject = self
                             .get_faldo_border_namednode(position + node_len, path_name)
                             .unwrap();
-                        // println!("End Faldo");
+                        let path_iri = self.path_to_namednode(path_name).unwrap();
                         self.faldo_for_step(position + node_len, path_iri, &subject)
                             .or_else(|| {
-                                // println!("End None");
                                 self.sub_mode = SubMode::Step(StepState::Finished);
                                 None
                             })
