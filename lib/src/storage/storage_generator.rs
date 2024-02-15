@@ -171,6 +171,7 @@ enum FaldoState {
     Finished,
 }
 
+#[derive(Debug)]
 struct StepInfos(StepPtr, u64, u64);
 
 struct GraphIter {
@@ -193,7 +194,7 @@ impl Iterator for GraphIter {
     type Item = EncodedQuad;
 
     fn next(&mut self) -> Option<EncodedQuad> {
-        // println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
+        println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
         match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
@@ -210,24 +211,13 @@ impl Iterator for GraphIter {
                 }
                 SubMode::AllNodes(_) => self.nodes().or_else(|| {
                     self.sub_mode = SubMode::Path;
-                    self.path_ids = self
-                        .storage
-                        .graph
-                        .path_ids()
-                        .collect::<Vec<_>>()
-                        .into_iter();
-                    self.curr_path = self.path_ids.next();
+                    self.set_paths();
                     self.next()
                 }),
                 SubMode::Path => self.paths().or_else(|| {
                     self.sub_mode = SubMode::Step(StepState::TypeStep);
-                    self.path_ids = self
-                        .storage
-                        .graph
-                        .path_ids()
-                        .collect::<Vec<_>>()
-                        .into_iter();
-                    self.curr_path = self.path_ids.next();
+                    self.set_paths();
+                    println!("Setting path for steps: {:?}, {:?}", self.curr_path, self.step);
                     self.set_first_step();
                     self.next()
                 }),
@@ -270,7 +260,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        // println!("\nNew: {:?}, {:?}, {:?}", subject, predicate, object);
+        println!("Iter: {:?}, {:?}, {:?}", subject, predicate, object);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -527,6 +517,7 @@ impl GraphIter {
             .collect::<Vec<_>>()
             .into_iter();
         self.curr_path = self.path_ids.next();
+        println!("Doing something? {:?}", self.curr_path);
     }
 
     fn set_first_step(&mut self) {
@@ -634,7 +625,12 @@ impl GraphIter {
                             }
                         }
                         triple = self.step_no_subject();
+                    } else {
+                        panic!("Could not get step info");  // each path should have at least one
+                                                            // step?!
                     }
+                } else {
+                    return None;    // Case of having no paths
                 }
             }
             return triple;
@@ -662,7 +658,9 @@ impl GraphIter {
                                 rank,
                                 position,
                             ); //results.append(&mut triples);
-                            self.mode = IterMode::Finished;
+                            if triple.is_none() {
+                                self.mode = IterMode::Finished;
+                            }
                             return triple;
                         }
                     }
@@ -682,13 +680,17 @@ impl GraphIter {
                                 self.storage.graph.path_handle_at_step(id, step).unwrap();
                             // println!("] 645");
                             let rank = step.pack() + 1;
-                            self.mode = IterMode::Finished;
-                            return self.step_handle_to_triples(
+                            let triple = self.step_handle_to_triples(
                                 &path_name,
                                 node_handle,
                                 rank,
                                 position,
                             ); //results.append(&mut triples);
+
+                            if triple.is_none() {
+                                self.mode = IterMode::Finished;
+                            }
+                            return triple;
                         }
                     }
                 }
@@ -731,6 +733,10 @@ impl GraphIter {
         }
     }
 
+    fn needs_faldo_triple(&self) -> bool {
+        self.predicate.is_none() || self.is_vocab(self.predicate.as_ref(), faldo::POSITION_PRED) || self.is_vocab(self.predicate.as_ref(), rdf::TYPE) || self.is_vocab(self.predicate.as_ref(), faldo::REFERENCE)
+    }
+
     fn step_handle_to_triples(
         &mut self,
         path_name: &str,
@@ -742,7 +748,7 @@ impl GraphIter {
         let node_len = self.storage.graph.node_len(node_handle) as u64;
         let position_literal = EncodedTerm::IntegerLiteral((position as i64).into());
         // println!("SH");
-        // print!(".");
+        print!(".");
 
         if self.subject.is_none() || step_iri == self.subject.as_ref().unwrap().clone() {
             if let SubMode::Step(st) = self.sub_mode {
@@ -807,7 +813,7 @@ impl GraphIter {
                         })
                     }
                     StepState::End => {
-                        if self.subject.is_none() {
+                        if self.subject.is_none() && self.needs_faldo_triple() {
                             self.sub_mode =
                                 SubMode::Step(StepState::FaldoBegin(FaldoState::Positon));
                         } else {
