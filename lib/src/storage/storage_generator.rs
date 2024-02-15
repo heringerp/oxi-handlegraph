@@ -1003,14 +1003,12 @@ impl GraphIter {
     }
 
     fn get_faldo_border_namednode(&self, position: u64, path_name: &str) -> Option<EncodedTerm> {
-        let path_name = encode(path_name);
         let path_name = path_name.replace(URL_HASH, "/");
         let text = format!(
             "{}/path/{}/position/{}",
             self.storage.base, path_name, position
         );
-        let named_node = NamedNode::new(text).unwrap();
-        Some(named_node.as_ref().into())
+        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
     }
 
     fn faldo_for_step(
@@ -1260,26 +1258,21 @@ impl GraphIter {
     fn handle_to_namednode(&self, handle: Handle) -> Option<EncodedTerm> {
         let id = handle.unpack_number();
         let text = format!("{}/node/{}", self.storage.base, id);
-        let named_node = NamedNode::new(text).unwrap();
-        Some(named_node.as_ref().into())
+        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
     }
 
     fn step_to_namednode(&self, path_name: &str, rank: u64) -> Option<EncodedTerm> {
         // println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
-        let path_name = encode(path_name);
         let path_name = path_name.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank);
-        let named_node = NamedNode::new(text).ok()?;
-        Some(named_node.as_ref().into())
+        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
     }
 
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
         // println!("PATH_TO_NAMEDNODE: {}", path_name);
-        let path_name = encode(path_name);
         let path_name = path_name.replace(URL_HASH, "/");
         let text = format!("{}/path/{}", self.storage.base, path_name);
-        let named_node = NamedNode::new(text).ok()?;
-        Some(named_node.as_ref().into())
+        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
     }
 
     fn get_path_name(&self, path_id: PathId) -> Option<String> {
@@ -1468,32 +1461,25 @@ mod tests {
 
     fn get_node(id: i64) -> EncodedTerm {
         let text = format!("{}/node/{}", BASE, id);
-        let named_node = NamedNode::new(text).unwrap();
-        named_node.as_ref().into()
+        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
     }
 
     fn get_step(path: &str, id: i64) -> EncodedTerm {
-        let path = encode(path);
         let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
-        let named_node = NamedNode::new(text).unwrap();
-        named_node.as_ref().into()
+        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
     }
 
     fn get_position(path: &str, id: i64) -> EncodedTerm {
-        let path = encode(path);
         let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
-        let named_node = NamedNode::new(text).unwrap();
-        named_node.as_ref().into()
+        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
     }
 
     fn get_path(path: &str) -> EncodedTerm {
-        let path = encode(path);
         let path = path.replace(URL_HASH, "/");
         let text = format!("{}/path/{}", BASE, path);
-        let named_node = NamedNode::new(text).unwrap();
-        named_node.as_ref().into()
+        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
     }
 
     fn count_subjects(subject: &EncodedTerm, triples: &Vec<EncodedQuad>) -> usize {

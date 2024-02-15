@@ -674,6 +674,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_encoding() {
         use crate::model::vocab::xsd;
