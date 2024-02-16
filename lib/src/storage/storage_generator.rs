@@ -18,6 +18,7 @@ use genawaiter::{
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Handle};
 use handlegraph::packed::PackedElement;
+use handlegraph::packedgraph::index::OneBasedIndex;
 use handlegraph::packedgraph::paths::StepPtr;
 use handlegraph::pathhandlegraph::{path::PathStep, GraphPathsRef, IntoPathIds, PathBase};
 use handlegraph::pathhandlegraph::{
@@ -36,7 +37,6 @@ use std::{iter, str};
 use urlencoding::{decode, encode};
 
 const LEN_OF_PATH_AND_SLASH: usize = 5;
-const URL_HASH: &str = "%23";
 const FIRST_RANK: u64 = 1;
 const FIRST_POS: u64 = 1;
 
@@ -194,7 +194,7 @@ impl Iterator for GraphIter {
     type Item = EncodedQuad;
 
     fn next(&mut self) -> Option<EncodedQuad> {
-        println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
+        //println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
         match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
@@ -217,7 +217,10 @@ impl Iterator for GraphIter {
                 SubMode::Path => self.paths().or_else(|| {
                     self.sub_mode = SubMode::Step(StepState::TypeStep);
                     self.set_paths();
-                    println!("Setting path for steps: {:?}, {:?}", self.curr_path, self.step);
+                    println!(
+                        "Setting path for steps: {:?}, {:?}",
+                        self.curr_path, self.step
+                    );
                     self.set_first_step();
                     self.next()
                 }),
@@ -260,7 +263,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        println!("Iter: {:?}, {:?}, {:?}", subject, predicate, object);
+        // println!("Iter: {:?}, {:?}, {:?}", subject, predicate, object);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -338,15 +341,15 @@ impl GraphIter {
             let mut parts = value.split("/").collect::<Vec<_>>();
             parts.reverse();
             if parts[1] == "node" {
-                return Some(SubjectType::NodeIri);
+                Some(SubjectType::NodeIri)
             } else if parts.contains(&"path") && parts[1] == "step" {
-                return Some(SubjectType::StepIri);
+                Some(SubjectType::StepIri)
             } else if parts.contains(&"path") && parts[1] == "position" {
-                return Some(SubjectType::StepBorderIri);
+                Some(SubjectType::StepBorderIri)
             } else if parts.contains(&"path") {
-                return Some(SubjectType::PathIri);
+                Some(SubjectType::PathIri)
             } else {
-                return None;
+                None
             }
         } else {
             None
@@ -517,7 +520,6 @@ impl GraphIter {
             .collect::<Vec<_>>()
             .into_iter();
         self.curr_path = self.path_ids.next();
-        println!("Doing something? {:?}", self.curr_path);
     }
 
     fn set_first_step(&mut self) {
@@ -534,27 +536,33 @@ impl GraphIter {
             match step_type {
                 StepType::Rank(path_name, target_rank) => {
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
-                        let path_ref = self.storage.graph.get_path_ref(id).unwrap();
-                        let step_handle = path_ref.step_at(path_ref.first_step());
-                        let mut step_handle = step_handle.unwrap();
-                        let mut node_handle = step_handle.handle();
-                        let mut rank = FIRST_RANK;
-                        let mut position = FIRST_POS;
+                        if self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
+                            print!(">");
+                            let step = StepPtr::from_one_based(target_rank as usize);
+                            self.step = Some(StepInfos(step, target_rank, 3));
+                        } else {
+                            let path_ref = self.storage.graph.get_path_ref(id).unwrap();
+                            let step_handle = path_ref.step_at(path_ref.first_step());
+                            let mut step_handle = step_handle.unwrap();
+                            let mut node_handle = step_handle.handle();
+                            let mut rank = FIRST_RANK;
+                            let mut position = FIRST_POS;
 
-                        let steps = self.storage.graph.path_steps(id).expect("Path has steps");
-                        // TODO: for -> probably cannot/does not make sense be parallelized
-                        for _ in steps.skip(1) {
-                            if rank >= target_rank {
-                                break;
+                            let steps = self.storage.graph.path_steps(id).expect("Path has steps");
+                            // TODO: for -> probably cannot/does not make sense be parallelized
+                            for _ in steps.skip(1) {
+                                if rank >= target_rank {
+                                    break;
+                                }
+                                step_handle = path_ref.next_step(step_handle.0).unwrap();
+                                position += self.storage.graph.node_len(node_handle) as u64;
+                                node_handle = step_handle.handle();
+                                rank += 1;
                             }
-                            step_handle = path_ref.next_step(step_handle.0).unwrap();
-                            position += self.storage.graph.node_len(node_handle) as u64;
-                            node_handle = step_handle.handle();
-                            rank += 1;
+                            self.step = Some(StepInfos(step_handle.0, rank, position));
                         }
                         // println!("First step: {}, {}, {:?}", rank, target_rank, self.get_path_name(id));
                         self.curr_path = Some(id);
-                        self.step = Some(StepInfos(step_handle.0, rank, position));
                     }
                 }
                 StepType::Position(path_name, target_pos) => {}
@@ -626,11 +634,11 @@ impl GraphIter {
                         }
                         triple = self.step_no_subject();
                     } else {
-                        panic!("Could not get step info");  // each path should have at least one
-                                                            // step?!
+                        panic!("Could not get step info"); // each path should have at least one
+                                                           // step?!
                     }
                 } else {
-                    return None;    // Case of having no paths
+                    return None; // Case of having no paths
                 }
             }
             return triple;
@@ -734,7 +742,10 @@ impl GraphIter {
     }
 
     fn needs_faldo_triple(&self) -> bool {
-        self.predicate.is_none() || self.is_vocab(self.predicate.as_ref(), faldo::POSITION_PRED) || self.is_vocab(self.predicate.as_ref(), rdf::TYPE) || self.is_vocab(self.predicate.as_ref(), faldo::REFERENCE)
+        self.predicate.is_none()
+            || self.is_vocab(self.predicate.as_ref(), faldo::POSITION_PRED)
+            || self.is_vocab(self.predicate.as_ref(), rdf::TYPE)
+            || self.is_vocab(self.predicate.as_ref(), faldo::REFERENCE)
     }
 
     fn step_handle_to_triples(
@@ -748,7 +759,7 @@ impl GraphIter {
         let node_len = self.storage.graph.node_len(node_handle) as u64;
         let position_literal = EncodedTerm::IntegerLiteral((position as i64).into());
         // println!("SH");
-        print!(".");
+        // print!(".");
 
         if self.subject.is_none() || step_iri == self.subject.as_ref().unwrap().clone() {
             if let SubMode::Step(st) = self.sub_mode {
@@ -1003,12 +1014,15 @@ impl GraphIter {
     }
 
     fn get_faldo_border_namednode(&self, position: u64, path_name: &str) -> Option<EncodedTerm> {
-        let path_name = path_name.replace(URL_HASH, "/");
+        let path_name = path_name.replace("#", "/");
         let text = format!(
             "{}/path/{}/position/{}",
             self.storage.base, path_name, position
         );
-        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
+        Some(EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        })
     }
 
     fn faldo_for_step(
@@ -1258,21 +1272,30 @@ impl GraphIter {
     fn handle_to_namednode(&self, handle: Handle) -> Option<EncodedTerm> {
         let id = handle.unpack_number();
         let text = format!("{}/node/{}", self.storage.base, id);
-        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
+        Some(EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        })
     }
 
     fn step_to_namednode(&self, path_name: &str, rank: u64) -> Option<EncodedTerm> {
         // println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
-        let path_name = path_name.replace(URL_HASH, "/");
+        let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank);
-        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
+        Some(EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        })
     }
 
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
         // println!("PATH_TO_NAMEDNODE: {}", path_name);
-        let path_name = path_name.replace(URL_HASH, "/");
+        let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}", self.storage.base, path_name);
-        Some(EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text })
+        Some(EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        })
     }
 
     fn get_path_name(&self, path_id: PathId) -> Option<String> {
@@ -1461,25 +1484,37 @@ mod tests {
 
     fn get_node(id: i64) -> EncodedTerm {
         let text = format!("{}/node/{}", BASE, id);
-        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
+        EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        }
     }
 
     fn get_step(path: &str, id: i64) -> EncodedTerm {
-        let path = path.replace(URL_HASH, "/");
+        let path = path.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
-        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
+        EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        }
     }
 
     fn get_position(path: &str, id: i64) -> EncodedTerm {
-        let path = path.replace(URL_HASH, "/");
+        let path = path.replace("#", "/");
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
-        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
+        EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        }
     }
 
     fn get_path(path: &str) -> EncodedTerm {
-        let path = path.replace(URL_HASH, "/");
+        let path = path.replace("#", "/");
         let text = format!("{}/path/{}", BASE, path);
-        EncodedTerm::NamedNode { iri_id: StrHash::new(""), value: text }
+        EncodedTerm::NamedNode {
+            iri_id: StrHash::new(""),
+            value: text,
+        }
     }
 
     fn count_subjects(subject: &EncodedTerm, triples: &Vec<EncodedQuad>) -> usize {
