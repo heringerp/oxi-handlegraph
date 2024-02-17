@@ -4,7 +4,7 @@ use super::{ChainedDecodingQuadIterator, Storage};
 use crate::model::vocab::rdf;
 use crate::model::{NamedNodeRef, Term};
 use crate::storage::binary_encoder::QuadEncoding;
-pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
+pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::Decoder;
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm};
@@ -30,7 +30,6 @@ use handlegraph::{
 use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use std::future::Future;
 use std::rc::Rc;
 use std::vec::IntoIter;
 use std::{iter, str};
@@ -721,7 +720,7 @@ impl GraphIter {
                 "step" => {
                     let step_idx = value.rfind("step").expect("Should contain step");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
-                    let path_text = &value[start..step_idx - 1].replace("/", "#");
+                    let path_text = &value[start..step_idx - 1]; //.replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
                     // println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
                     Some(StepType::Rank(path_name, parts[0].parse().ok()?))
@@ -729,7 +728,7 @@ impl GraphIter {
                 "position" => {
                     let pos_idx = value.rfind("position").expect("Should contain position");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
-                    let path_text = &value[start..pos_idx - 1].replace("/", "#");
+                    let path_text = &value[start..pos_idx - 1]; //.replace("/", "#");
                     let path_name = decode(&path_text).ok()?.to_string();
                     // println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
                     Some(StepType::Position(path_name, parts[0].parse().ok()?))
@@ -1014,7 +1013,7 @@ impl GraphIter {
     }
 
     fn get_faldo_border_namednode(&self, position: u64, path_name: &str) -> Option<EncodedTerm> {
-        let path_name = path_name.replace("#", "/");
+        // let path_name = path_name.replace("#", "/");
         let text = format!(
             "{}/path/{}/position/{}",
             self.storage.base, path_name, position
@@ -1280,7 +1279,7 @@ impl GraphIter {
 
     fn step_to_namednode(&self, path_name: &str, rank: u64) -> Option<EncodedTerm> {
         // println!("STEP_TO_NAMEDNODE: {} - {:?}", path_name, rank);
-        let path_name = path_name.replace("#", "/");
+        // let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank);
         Some(EncodedTerm::NamedNode {
             iri_id: StrHash::new(""),
@@ -1290,7 +1289,7 @@ impl GraphIter {
 
     fn path_to_namednode(&self, path_name: &str) -> Option<EncodedTerm> {
         // println!("PATH_TO_NAMEDNODE: {}", path_name);
-        let path_name = path_name.replace("#", "/");
+        // let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}", self.storage.base, path_name);
         Some(EncodedTerm::NamedNode {
             iri_id: StrHash::new(""),
@@ -1491,7 +1490,7 @@ mod tests {
     }
 
     fn get_step(path: &str, id: i64) -> EncodedTerm {
-        let path = path.replace("#", "/");
+        // let path = path.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
         EncodedTerm::NamedNode {
             iri_id: StrHash::new(""),
@@ -1500,7 +1499,7 @@ mod tests {
     }
 
     fn get_position(path: &str, id: i64) -> EncodedTerm {
-        let path = path.replace("#", "/");
+        // let path = path.replace("#", "/");
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
         EncodedTerm::NamedNode {
             iri_id: StrHash::new(""),
@@ -1509,7 +1508,7 @@ mod tests {
     }
 
     fn get_path(path: &str) -> EncodedTerm {
-        let path = path.replace("#", "/");
+        // let path = path.replace("#", "/");
         let text = format!("{}/path/{}", BASE, path);
         EncodedTerm::NamedNode {
             iri_id: StrHash::new(""),
@@ -1695,11 +1694,11 @@ mod tests {
         for triple in &step_triples {
             print_quad(triple);
         }
-        let count_step1 = count_subjects(&get_step("x#a", 1), &step_triples);
-        let count_step2 = count_subjects(&get_step("x#a", 2), &step_triples);
-        let count_pos1 = count_subjects(&get_position("x#a", 1), &step_triples);
-        let count_pos9 = count_subjects(&get_position("x#a", 9), &step_triples);
-        let count_pos10 = count_subjects(&get_position("x#a", 10), &step_triples);
+        let count_step1 = count_subjects(&get_step("x/a", 1), &step_triples);
+        let count_step2 = count_subjects(&get_step("x/a", 2), &step_triples);
+        let count_pos1 = count_subjects(&get_position("x/a", 1), &step_triples);
+        let count_pos9 = count_subjects(&get_position("x/a", 9), &step_triples);
+        let count_pos10 = count_subjects(&get_position("x/a", 10), &step_triples);
         assert_eq!(count_step1, 8, "Number of step 1 triples");
         assert_eq!(count_step2, 8, "Number of step 2 triples");
         assert_eq!(count_pos1, 4, "Number of pos 1 triples");
@@ -1712,7 +1711,7 @@ mod tests {
         let gen = get_odgi_test_file_generator("t_step.gfa");
         let step_triples: Vec<_> = gen
             .quads_for_pattern(
-                Some(&get_step("x#a", 1)),
+                Some(&get_step("x/a", 1)),
                 None,
                 None,
                 &EncodedTerm::DefaultGraph,
@@ -1774,7 +1773,7 @@ mod tests {
             print_quad(triple);
         }
         let quad = EncodedQuad::new(
-            get_step("x#a", 6),
+            get_step("x/a", 6),
             vg::NODE_PRED.into(),
             get_node(9),
             EncodedTerm::DefaultGraph,
@@ -1793,7 +1792,7 @@ mod tests {
             .collect();
         let specific_triples: Vec<_> = gen
             .quads_for_pattern(
-                Some(&get_path("x#a")),
+                Some(&get_path("x/a")),
                 Some(&rdf::TYPE.into()),
                 Some(&vg::PATH.into()),
                 &EncodedTerm::DefaultGraph,
@@ -1804,7 +1803,7 @@ mod tests {
             print_quad(triple)
         }
         let quad = EncodedQuad::new(
-            get_path("x#a"),
+            get_path("x/a"),
             rdf::TYPE.into(),
             vg::PATH.into(),
             EncodedTerm::DefaultGraph,
