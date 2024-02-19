@@ -547,13 +547,38 @@ impl GraphIter {
     }
 
     fn set_paths(&mut self) {
-        self.path_ids = self
-            .storage
-            .graph
-            .path_ids()
-            .collect::<Vec<_>>()
-            .into_iter();
-        self.curr_path = self.path_ids.next();
+        if let Some(path_id) = self.get_path_id_from_iri(self.subject.as_ref()) {
+            self.curr_path = Some(path_id);
+            self.path_ids = vec![path_id].into_iter();
+        } else if let Some(path_id) = self.get_path_id_from_iri(self.object.as_ref()) {
+            println!("Objecting!");
+            self.curr_path = Some(path_id);
+            self.path_ids = vec![path_id].into_iter();
+        } else {
+            self.path_ids = self
+                .storage
+                .graph
+                .path_ids()
+                .collect::<Vec<_>>()
+                .into_iter();
+            self.curr_path = self.path_ids.next();
+        }
+    }
+
+    fn get_path_id_from_iri(&self, term: Option<&EncodedTerm>) -> Option<PathId> {
+        let term = term?;
+        if self.get_term_type(term)? == SubjectType::PathIri {
+            if let EncodedTerm::NamedNode { iri_id: _, value } = term {
+                let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
+                let path_text = &value[start..]; //.replace("/", "#");
+                let path_name = path_text.to_string();
+                self.storage.graph.get_path_id(path_name.as_bytes())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     fn set_first_step(&mut self) {
@@ -756,7 +781,7 @@ impl GraphIter {
                     let step_idx = value.rfind("step").expect("Should contain step");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
                     let path_text = &value[start..step_idx - 1]; //.replace("/", "#");
-                    let path_name = decode(&path_text).ok()?.to_string();
+                    let path_name = path_text.to_string();
                     // println!("Step: {}\t{}\t{}", step_idx, path_text, path_name);
                     Some(StepType::Rank(path_name, parts[0].parse().ok()?))
                 }
@@ -764,7 +789,7 @@ impl GraphIter {
                     let pos_idx = value.rfind("position").expect("Should contain position");
                     let start = self.storage.base.len() + 1 + LEN_OF_PATH_AND_SLASH;
                     let path_text = &value[start..pos_idx - 1]; //.replace("/", "#");
-                    let path_name = decode(&path_text).ok()?.to_string();
+                    let path_name = path_text.to_string();
                     // println!("Pos: {}\t{}\t{}", pos_idx, path_text, path_name);
                     Some(StepType::Position(path_name, parts[0].parse().ok()?))
                 }
@@ -1470,6 +1495,7 @@ enum StepType {
     Position(String, u64),
 }
 
+#[derive(PartialEq, Eq)]
 enum SubjectType {
     PathIri,
     StepBorderIri,
