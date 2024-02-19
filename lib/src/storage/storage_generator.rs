@@ -134,6 +134,7 @@ enum SubMode {
     AllNodes(NodeState),
     Step(StepState),
     Path,
+    PathSteps,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +232,7 @@ impl Iterator for GraphIter {
                 SubMode::Step(_) => self.steps(),
                 SubMode::AllNodes(_) => self.nodes(),
                 SubMode::SingleNode(_) => self.nodes(),
+                SubMode::PathSteps => self.path_steps(),
                 _ => panic!("Should never be called without setting submode"),
             },
         }
@@ -277,6 +279,12 @@ impl GraphIter {
         } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
             self.mode = IterMode::Single;
             self.type_triples();
+        } else if self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) && self.object.is_some() {
+            println!("Short");
+            self.mode = IterMode::Single;
+            self.set_paths();
+            self.set_first_step();
+            self.sub_mode = SubMode::PathSteps;
         } else if self.is_node_related() {
             // println!("OF: nodes");
             if self.subject.is_some() {
@@ -375,6 +383,33 @@ impl GraphIter {
             panic!("There should always be a type submode!");
         };
         self.sub_mode = sm;
+    }
+
+    fn path_steps(&mut self) -> Option<EncodedQuad> {
+        if let Some(path_id) = self.curr_path {
+            if let Some(StepInfos(step, rank, _)) = self.step {
+                let path_name = self.get_path_name(path_id).unwrap();
+                let path_node = self.path_to_namednode(&path_name);
+                let step_node = self.step_to_namednode(&path_name, rank);
+                println!("{} - PATH - {}", rank, &path_name);
+                if let Some(next_step) = self.storage.graph.path_next_step(path_id, step) {
+                    self.step = Some(StepInfos(next_step, rank + 1, 3));
+                } else {
+                    self.step = None;
+                    self.mode = IterMode::Finished;
+                }
+                return Some(EncodedQuad {
+                    subject: step_node.unwrap(),
+                    predicate: vg::PATH_PRED.into(),
+                    object: path_node.unwrap(),
+                    graph_name: self.graph_name.clone(),
+                });
+            } else {
+                panic!("ps2");
+            }
+        } else {
+            panic!("ps1");
+        }
     }
 
     fn nodes(&mut self) -> Option<EncodedQuad> {
