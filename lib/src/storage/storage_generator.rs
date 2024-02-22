@@ -138,6 +138,7 @@ enum SubMode {
     Path,
     PathSteps,
     StepNode,
+    StepFaldoBegin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,11 +234,12 @@ impl Iterator for GraphIter {
                 SubMode::SingleNode(_) => self.nodes(),
                 SubMode::PathSteps => self.path_steps(),
                 SubMode::StepNode => self.step_node(),
+                SubMode::StepFaldoBegin => self.step_faldo_begin(),
                 _ => panic!("Should never be called without setting submode"),
             },
         };
         if triple.is_none() {
-            //self.print_query(true);
+            // self.print_query(true);
         }
         triple
     }
@@ -268,7 +270,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        //result.print_query(false);
+        // result.print_query(false);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -320,6 +322,9 @@ impl GraphIter {
             self.set_paths();
             self.set_first_step();
             self.sub_mode = SubMode::PathSteps;
+        } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) {
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::StepFaldoBegin;
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepNode;
@@ -463,6 +468,30 @@ impl GraphIter {
                         subject: self.subject.clone().unwrap(),
                         predicate: vg::NODE_PRED.into(),
                         object: node,
+                        graph_name: self.graph_name.clone(),
+                    })
+                }
+                _ => unimplemented!("step node for position step"),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn step_faldo_begin(&mut self) -> Option<EncodedQuad> {
+        //println!("Shortcutting");
+        self.mode = IterMode::Finished;
+        if let Some(step_type) = self.get_step_iri_fields() {
+            match step_type {
+                StepType::Rank(path_name, rank) => {
+                    let step_ptr = StepPtr::from_one_based(rank as usize);
+                    let path_id = self.storage.graph.get_path_id(path_name.as_bytes())?;
+                    let pos = self.storage.graph.path_step_base_offset(path_id, step_ptr)?;
+                    let position_literal = EncodedTerm::IntegerLiteral((pos as i64).into());
+                    Some(EncodedQuad {
+                        subject: self.subject.clone().unwrap(),
+                        predicate: faldo::BEGIN.into(),
+                        object: position_literal,
                         graph_name: self.graph_name.clone(),
                     })
                 }
