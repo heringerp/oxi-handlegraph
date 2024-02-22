@@ -27,7 +27,7 @@ use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
-use std::str;
+use std::str::{self, FromStr};
 use std::time::Duration as StdDuration;
 #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::time::Instant;
@@ -1209,10 +1209,10 @@ impl SimpleEvaluator {
                 let e = self.expression_evaluator(e, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
-                    Some(build_string_literal_from_id(to_string_id(
+                    Some(to_string_node(
                         &dataset,
                         &e(tuple)?,
-                    )?))
+                    )?)
                 })
             }
             PlanExpression::Lang(e) => {
@@ -2132,11 +2132,20 @@ fn to_bool(term: &EncodedTerm) -> Option<bool> {
     }
 }
 
+fn to_string_node(dataset: &DatasetView, term: &EncodedTerm) -> Option<EncodedTerm> {
+    match term {
+        EncodedTerm::NamedNode { iri_id: _, value } => {
+            Some(EncodedTerm::BigStringLiteral{ value_id: StrHash::new(""), value: value.to_owned() })
+        },
+        _ => None,
+    }
+}
+
 fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallStringOrId> {
     match term {
-        EncodedTerm::NamedNode { iri_id, .. } => Some(
-            if let Ok(value) = SmallString::try_from(dataset.get_str(iri_id).ok()??.as_str()) {
-                value.into()
+        EncodedTerm::NamedNode { iri_id, value } => Some(
+            if let Ok(svalue) = SmallString::from_str(value) {
+                svalue.into()
             } else {
                 SmallStringOrId::Big(*iri_id)
             },

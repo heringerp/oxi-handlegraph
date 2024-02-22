@@ -31,9 +31,11 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::rc::Rc;
+use std::str;
 use std::vec::IntoIter;
-use std::{iter, str};
-use urlencoding::{decode, encode};
+use time::format_description::well_known::Rfc2822;
+use time::macros::offset;
+use time::OffsetDateTime;
 
 const LEN_OF_PATH_AND_SLASH: usize = 5;
 const FIRST_RANK: u64 = 1;
@@ -135,6 +137,7 @@ enum SubMode {
     Step(StepState),
     Path,
     PathSteps,
+    StepNode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,7 +198,7 @@ impl Iterator for GraphIter {
 
     fn next(&mut self) -> Option<EncodedQuad> {
         //println!("\nnext state: {:?}, {:?}", self.mode, self.sub_mode);
-        match self.mode {
+        let triple = match self.mode {
             IterMode::Uninitialized => None,
             IterMode::Invalid => None,
             IterMode::Finished => None,
@@ -217,10 +220,6 @@ impl Iterator for GraphIter {
                 SubMode::Path => self.paths().or_else(|| {
                     self.sub_mode = SubMode::Step(StepState::TypeStep);
                     self.set_paths();
-                    println!(
-                        "Setting path for steps: {:?}, {:?}",
-                        self.curr_path, self.step
-                    );
                     self.set_first_step();
                     self.next()
                 }),
@@ -233,9 +232,14 @@ impl Iterator for GraphIter {
                 SubMode::AllNodes(_) => self.nodes(),
                 SubMode::SingleNode(_) => self.nodes(),
                 SubMode::PathSteps => self.path_steps(),
+                SubMode::StepNode => self.step_node(),
                 _ => panic!("Should never be called without setting submode"),
             },
+        };
+        if triple.is_none() {
+            //self.print_query(true);
         }
+        triple
     }
 }
 
@@ -264,9 +268,41 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        // println!("Iter: {:?}, {:?}, {:?}", subject, predicate, object);
+        //result.print_query(false);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
+    }
+
+    fn print_query(&self, is_end: bool) {
+        let sub = match &self.subject {
+            Some(EncodedTerm::NamedNode { iri_id: _, value }) => value.clone(),
+            None => "?".to_owned(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        let pre = match &self.predicate {
+            Some(EncodedTerm::NamedNode { iri_id: _, value }) => value.clone(),
+            None => "?".to_owned(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        let obj = match &self.object {
+            Some(EncodedTerm::NamedNode { iri_id: _, value }) => value.clone(),
+            Some(EncodedTerm::SmallStringLiteral(value)) => format!("\"{}\"", value).to_string(),
+            Some(EncodedTerm::BigStringLiteral { value_id: _, value }) => {
+                format!("\"{}\"", value).to_string()
+            }
+            Some(EncodedTerm::IntegerLiteral(value)) => value.to_string(),
+            None => "?".to_owned(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        let local = OffsetDateTime::now_utc()
+            .to_offset(offset!(+1))
+            .format(&Rfc2822)
+            .unwrap();
+        if is_end {
+            println!(")  {}\t{}\t\t{}\t\t{} .", local, sub, pre, obj);
+        } else {
+            println!("(  {}\t{}\t\t{}\t\t{} .", local, sub, pre, obj);
+        }
     }
 
     fn quads_for_pattern(&mut self) {
@@ -280,11 +316,13 @@ impl GraphIter {
             self.mode = IterMode::Single;
             self.type_triples();
         } else if self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) && self.object.is_some() {
-            println!("Short");
             self.mode = IterMode::Single;
             self.set_paths();
             self.set_first_step();
             self.sub_mode = SubMode::PathSteps;
+        } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::StepNode;
         } else if self.is_node_related() {
             // println!("OF: nodes");
             if self.subject.is_some() {
@@ -391,7 +429,6 @@ impl GraphIter {
                 let path_name = self.get_path_name(path_id).unwrap();
                 let path_node = self.path_to_namednode(&path_name);
                 let step_node = self.step_to_namednode(&path_name, rank);
-                println!("{} - PATH - {}", rank, &path_name);
                 if let Some(next_step) = self.storage.graph.path_next_step(path_id, step) {
                     self.step = Some(StepInfos(next_step, rank + 1, 3));
                 } else {
@@ -409,6 +446,30 @@ impl GraphIter {
             }
         } else {
             panic!("ps1");
+        }
+    }
+
+    fn step_node(&mut self) -> Option<EncodedQuad> {
+        //println!("Shortcutting");
+        self.mode = IterMode::Finished;
+        if let Some(step_type) = self.get_step_iri_fields() {
+            match step_type {
+                StepType::Rank(path_name, rank) => {
+                    let step_ptr = StepPtr::from_one_based(rank as usize);
+                    let path_id = self.storage.graph.get_path_id(path_name.as_bytes())?;
+                    let handle = self.storage.graph.path_handle_at_step(path_id, step_ptr)?;
+                    let node = self.handle_to_namednode(handle)?;
+                    Some(EncodedQuad {
+                        subject: self.subject.clone().unwrap(),
+                        predicate: vg::NODE_PRED.into(),
+                        object: node,
+                        graph_name: self.graph_name.clone(),
+                    })
+                }
+                _ => unimplemented!("step node for position step"),
+            }
+        } else {
+            None
         }
     }
 
@@ -551,7 +612,6 @@ impl GraphIter {
             self.curr_path = Some(path_id);
             self.path_ids = vec![path_id].into_iter();
         } else if let Some(path_id) = self.get_path_id_from_iri(self.object.as_ref()) {
-            println!("Objecting!");
             self.curr_path = Some(path_id);
             self.path_ids = vec![path_id].into_iter();
         } else {
@@ -596,7 +656,6 @@ impl GraphIter {
                 StepType::Rank(path_name, target_rank) => {
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
                         if self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
-                            print!(">");
                             let step = StepPtr::from_one_based(target_rank as usize);
                             self.step = Some(StepInfos(step, target_rank, 3));
                         } else {
