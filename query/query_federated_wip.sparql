@@ -40,21 +40,24 @@ WHERE {
             ?step vg:path ?path .
         }
     }
-  {
-    SELECT (xsd:integer(STRAFTER(STR(?minnode), "node/")) AS ?min) WHERE {
-  { 
-    SELECT ?rminstep WHERE {
-  	  ?rminstep vg:path <https://example.org/path/HG01928/1/JAGYVQ010000082.1> .
+    {
+        SELECT ?c (MAX(?value) AS ?max) (MIN(?value) AS ?min) WHERE {
+            { 
+                SELECT ?rminstep WHERE {
+                    ?rminstep vg:path <https://example.org/path/GRCh38/chrY> .
+                }
+            }
+            ?rminstep faldo:begin ?pos .
+            ?rminstep vg:node ?minnode .
+            BIND(1 AS ?c) .
+            BIND(xsd:integer(STRAFTER(STR(?minnode), "node/")) AS ?value)
+            FILTER(?pos >= 2000000) .
+            FILTER(?pos <= 6000000).
+        }
+        GROUP BY ?c
     }
-  }
-  ?rminstep faldo:begin ?pos .
-  ?rminstep vg:node ?minnode .
-  FILTER(?pos >= 1000)
-}
-ORDER BY ?pos
-LIMIT 1
-  }
     ?step vg:node ?node .
     BIND(xsd:integer(STRAFTER(STR(?node), "node/")) AS ?handle) .
-  FILTER(?handle >= ?min) . 
+    FILTER(?handle >= ?min) . 
+    FILTER(?handle <= ?max) .
 }
