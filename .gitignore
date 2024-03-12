@@ -20,4 +20,4 @@ data/
 *.gfa
 !lib/*.gfa
 *.ttl
-
+*.svg
