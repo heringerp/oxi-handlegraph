@@ -8,6 +8,8 @@ pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, S
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use gfa::parser::GFAParser;
+use handlegraph::handlegraph::HandleGraph;
+use handlegraph::pathhandlegraph::GraphPaths;
 use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
 use std::str;
 
@@ -172,14 +174,15 @@ impl StorageReader {
         }
     }
     pub fn len(&self) -> Result<usize, StorageError> {
-        // Ok(self.reader.len(&self.storage.gspo_cf)? + self.reader.len(&self.storage.dspo_cf)?)
-        Ok(0)
+        let node_triples = self.generator.storage.graph.node_count() * 2;
+        let path_triples = self.generator.storage.graph.path_count();
+        let step_triples = 0;
+        let edge_triples = self.generator.storage.graph.edge_count() * 2;
+        Ok(node_triples + path_triples + step_triples + edge_triples)
     }
 
     pub fn is_empty(&self) -> Result<bool, StorageError> {
-        // Ok(self.reader.is_empty(&self.storage.gspo_cf)?
-        // && self.reader.is_empty(&self.storage.dspo_cf)?)
-        Ok(true)
+        Ok(self.generator.storage.graph.node_count() == 0)
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, StorageError> {

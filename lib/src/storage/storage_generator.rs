@@ -42,7 +42,7 @@ const FIRST_RANK: u64 = 1;
 const FIRST_POS: u64 = 1;
 
 pub struct StorageGenerator {
-    storage: Rc<Storage>,
+    pub storage: Rc<Storage>,
 }
 
 impl StorageGenerator {
@@ -136,7 +136,7 @@ enum SubMode {
     AllNodes(NodeState),
     Step(StepState),
     Path,
-    PathSteps,
+    PathSteps(bool),
     StepNode,
     StepFaldoBegin,
 }
@@ -232,14 +232,14 @@ impl Iterator for GraphIter {
                 SubMode::Step(_) => self.steps(),
                 SubMode::AllNodes(_) => self.nodes(),
                 SubMode::SingleNode(_) => self.nodes(),
-                SubMode::PathSteps => self.path_steps(),
+                SubMode::PathSteps(all_paths) => self.path_steps(all_paths),
                 SubMode::StepNode => self.step_node(),
                 SubMode::StepFaldoBegin => self.step_faldo_begin(),
                 _ => panic!("Should never be called without setting submode"),
             },
         };
         if triple.is_none() {
-            // self.print_query(true);
+            self.print_query(true);
         }
         triple
     }
@@ -270,7 +270,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        // result.print_query(false);
+        result.print_query(false);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -317,11 +317,12 @@ impl GraphIter {
         } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
             self.mode = IterMode::Single;
             self.type_triples();
-        } else if self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) && self.object.is_some() {
+        } else if self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) {
             self.mode = IterMode::Single;
             self.set_paths();
             self.set_first_step();
-            self.sub_mode = SubMode::PathSteps;
+            self.sub_mode = SubMode::PathSteps(self.object.is_none());
+            println!("Shortcutting")
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepFaldoBegin;
@@ -428,7 +429,7 @@ impl GraphIter {
         self.sub_mode = sm;
     }
 
-    fn path_steps(&mut self) -> Option<EncodedQuad> {
+    fn path_steps(&mut self, all_paths: bool) -> Option<EncodedQuad> {
         if let Some(path_id) = self.curr_path {
             if let Some(StepInfos(step, rank, _)) = self.step {
                 let path_name = self.get_path_name(path_id).unwrap();
@@ -437,20 +438,31 @@ impl GraphIter {
                 if let Some(next_step) = self.storage.graph.path_next_step(path_id, step) {
                     self.step = Some(StepInfos(next_step, rank + 1, 3));
                 } else {
-                    self.step = None;
-                    self.mode = IterMode::Finished;
+                    if all_paths {
+                        self.curr_path = self.path_ids.next();
+                        self.set_first_step();
+                    } else {
+                        self.step = None;
+                        self.mode = IterMode::Finished;
+                    }
                 }
-                return Some(EncodedQuad {
+                Some(EncodedQuad {
                     subject: step_node.unwrap(),
                     predicate: vg::PATH_PRED.into(),
                     object: path_node.unwrap(),
                     graph_name: self.graph_name.clone(),
-                });
+                })
             } else {
                 panic!("ps2");
             }
         } else {
-            panic!("ps1");
+            if self.path_ids.next().is_none() {
+                self.step = None;
+                self.mode = IterMode::Finished;
+                None
+            } else {
+                panic!("ps1");
+            }
         }
     }
 
