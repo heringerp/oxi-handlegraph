@@ -142,6 +142,7 @@ enum SubMode {
     ReverseLink,
     StepNode,
     StepFaldoBegin,
+    FaldoBeginPosition,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +232,7 @@ impl Iterator for GraphIter {
                 _ => None,
             },
             IterMode::Single => match self.sub_mode {
+                SubMode::Start => panic!("SubMode::Start is only valid for ALL queries"),
                 SubMode::Path => self.paths(),
                 SubMode::Step(_) => self.steps(),
                 SubMode::AllNodes(_) => self.nodes(),
@@ -241,7 +243,7 @@ impl Iterator for GraphIter {
                 SubMode::ReverseLink => self.reverse_link(),
                 SubMode::StepNode => self.step_node(),
                 SubMode::StepFaldoBegin => self.step_faldo_begin(),
-                _ => panic!("Should never be called without setting submode"),
+                SubMode::FaldoBeginPosition => self.faldo_begin_position(),
             },
         };
         if triple.is_none() {
@@ -334,6 +336,10 @@ impl GraphIter {
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepFaldoBegin;
+        } else if self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) && self.object.is_some() {
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::FaldoBeginPosition;
+            self.set_paths();
         } else if self.is_vocab(self.predicate.as_ref(), vg::LINKS) && self.object.is_some() {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::ReverseLink;
@@ -574,6 +580,33 @@ impl GraphIter {
         } else {
             None
         }
+    }
+
+    fn faldo_begin_position(&mut self) -> Option<EncodedQuad> {
+        let pos: i64 = match self.object.clone().unwrap() {
+            EncodedTerm::IntegerLiteral(pos) => pos.into(),
+            EncodedTerm::BigStringLiteral { value_id: _, value } => value.parse().ok()?,
+            EncodedTerm::SmallStringLiteral(pos) => pos.parse().ok()?,
+            _ => return None,
+        };
+        if let Some(path) = self.curr_path {
+            let mut step_ptr = self.storage.position_map.find_step_at_base(path, pos as usize);
+            while self.curr_path.is_some() {
+                self.curr_path = self.path_ids.next();
+                if step_ptr.is_some() {
+                    let path_name = self.get_path_name(path)?;
+                    let step_node = self.step_to_namednode(&path_name, step_ptr.unwrap().pack());
+                    return Some(EncodedQuad {
+                        subject: step_node.unwrap(),
+                        predicate: self.predicate.clone().unwrap(), 
+                        object: self.object.clone().unwrap(),
+                        graph_name: self.graph_name.clone()
+                    });
+                }
+                step_ptr = self.storage.position_map.find_step_at_base(self.curr_path?, pos as usize);
+            }
+        }
+        None
     }
 
     fn step_faldo_begin(&mut self) -> Option<EncodedQuad> {
