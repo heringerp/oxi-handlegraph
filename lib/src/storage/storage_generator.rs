@@ -137,6 +137,7 @@ enum SubMode {
     Step(StepState),
     Path,
     PathSteps(bool),
+    PathForStep,
     AllStepNodes,
     StepNode,
     StepFaldoBegin,
@@ -234,15 +235,16 @@ impl Iterator for GraphIter {
                 SubMode::AllNodes(_) => self.nodes(),
                 SubMode::SingleNode(_) => self.nodes(),
                 SubMode::PathSteps(all_paths) => self.path_steps(all_paths),
+                SubMode::PathForStep => self.path_for_step(),
                 SubMode::AllStepNodes => self.all_step_nodes(),
                 SubMode::StepNode => self.step_node(),
                 SubMode::StepFaldoBegin => self.step_faldo_begin(),
                 _ => panic!("Should never be called without setting submode"),
             },
         };
-        // if triple.is_none() {
-        //     self.print_query(true);
-        // }
+        if triple.is_none() {
+            self.print_query(true);
+        }
         triple
     }
 }
@@ -272,7 +274,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        //result.print_query(false);
+        result.print_query(false);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
@@ -319,6 +321,9 @@ impl GraphIter {
         } else if self.is_vocab(self.predicate.as_ref(), rdf::TYPE) && self.object.is_some() {
             self.mode = IterMode::Single;
             self.type_triples();
+        } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) {
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::PathForStep;
         } else if self.is_vocab(self.predicate.as_ref(), vg::PATH_PRED) {
             self.mode = IterMode::Single;
             self.set_paths();
@@ -433,6 +438,20 @@ impl GraphIter {
             panic!("There should always be a type submode!");
         };
         self.sub_mode = sm;
+    }
+
+    fn path_for_step(&mut self) -> Option<EncodedQuad> {
+        if let Some(StepType::Rank(path_name, _)) = self.get_step_iri_fields() {
+            let path_node = self.path_to_namednode(&path_name);
+            self.mode = IterMode::Finished;
+            Some(EncodedQuad { 
+                subject: self.subject.clone().unwrap(),
+                predicate: vg::PATH_PRED.into(),
+                object: path_node.unwrap(),
+                graph_name: self.graph_name.clone() })
+        } else {
+            None
+        }
     }
 
     fn path_steps(&mut self, all_paths: bool) -> Option<EncodedQuad> {
