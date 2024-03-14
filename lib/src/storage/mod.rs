@@ -9,6 +9,7 @@ pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, S
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use gfa::parser::GFAParser;
 use handlegraph::handlegraph::HandleGraph;
+use handlegraph::path_position::PathPositionMap;
 use handlegraph::pathhandlegraph::GraphPaths;
 use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
 use std::str;
@@ -47,13 +48,16 @@ const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 #[derive(Clone)]
 pub struct Storage {
     graph: PackedGraph,
+    position_map: PathPositionMap,
     base: String,
 }
 
 impl Storage {
     pub fn new() -> Result<Self, StorageError> {
+        let graph = PackedGraph::new();
         Ok(Self {
-            graph: PackedGraph::new(),
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -65,7 +69,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -78,7 +83,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -91,7 +97,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -107,7 +114,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -120,7 +128,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }

@@ -584,7 +584,7 @@ impl GraphIter {
                 StepType::Rank(path_name, rank) => {
                     let step_ptr = StepPtr::from_one_based(rank as usize);
                     let path_id = self.storage.graph.get_path_id(path_name.as_bytes())?;
-                    let pos = self.storage.graph.path_step_base_offset(path_id, step_ptr)?;
+                    let pos = self.storage.position_map.path_step_position(path_id, step_ptr)?;
                     let position_literal = EncodedTerm::IntegerLiteral((pos as i64).into());
                     Some(EncodedQuad {
                         subject: self.subject.clone().unwrap(),
