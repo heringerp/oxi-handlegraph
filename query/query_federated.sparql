@@ -27,7 +27,7 @@ WHERE {
        }
      }
      ?patient fhir:Patient.identifier [ fhir:Identifier.value [ fhir:value ?pat_id ] ] .
-     ?patient fhir:haplotype ?haplo .
+     ?patient fhir:sampleName ?haplo .
    }
    ?path rdf:type vg:Path .
    FILTER( CONTAINS( STR(?path), ?haplo ) ) .

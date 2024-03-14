@@ -21,3 +21,7 @@ data/
 !lib/*.gfa
 *.ttl
 *.svg
+**/perf.data
+**/perf.data.old
+**/run/
+

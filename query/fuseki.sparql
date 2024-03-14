@@ -15,5 +15,5 @@ WHERE {
     }
   }
   ?patient fhir:Patient.identifier [ fhir:Identifier.value [ fhir:value ?pat_id ] ] .
-  ?patient fhir:haplotype ?path .
+  ?patient fhir:sampleName ?path .
 }

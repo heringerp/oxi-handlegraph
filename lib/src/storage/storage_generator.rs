@@ -240,9 +240,9 @@ impl Iterator for GraphIter {
                 _ => panic!("Should never be called without setting submode"),
             },
         };
-        if triple.is_none() {
-            self.print_query(true);
-        }
+        // if triple.is_none() {
+        //     self.print_query(true);
+        // }
         triple
     }
 }
@@ -272,7 +272,7 @@ impl GraphIter {
         };
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
-        result.print_query(false);
+        //result.print_query(false);
         // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
