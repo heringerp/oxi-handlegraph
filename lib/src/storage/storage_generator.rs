@@ -137,6 +137,7 @@ enum SubMode {
     Step(StepState),
     Path,
     PathSteps(bool),
+    AllStepNodes,
     StepNode,
     StepFaldoBegin,
 }
@@ -233,6 +234,7 @@ impl Iterator for GraphIter {
                 SubMode::AllNodes(_) => self.nodes(),
                 SubMode::SingleNode(_) => self.nodes(),
                 SubMode::PathSteps(all_paths) => self.path_steps(all_paths),
+                SubMode::AllStepNodes => self.all_step_nodes(),
                 SubMode::StepNode => self.step_node(),
                 SubMode::StepFaldoBegin => self.step_faldo_begin(),
                 _ => panic!("Should never be called without setting submode"),
@@ -322,13 +324,17 @@ impl GraphIter {
             self.set_paths();
             self.set_first_step();
             self.sub_mode = SubMode::PathSteps(self.object.is_none());
-            println!("Shortcutting")
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepFaldoBegin;
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepNode;
+        } else if self.subject.is_none() && self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) && self.object.is_none() {
+            self.set_paths();
+            self.set_first_step();
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::AllStepNodes;
         } else if self.is_node_related() {
             // println!("OF: nodes");
             if self.subject.is_some() {
@@ -463,6 +469,35 @@ impl GraphIter {
             } else {
                 panic!("ps1");
             }
+        }
+    }
+
+    fn all_step_nodes(&mut self) -> Option<EncodedQuad> {
+        if let Some(path_id) = self.curr_path {
+            if let Some(StepInfos(step, rank, _)) = self.step {
+                let path_name = self.get_path_name(path_id).unwrap();
+                let step_node = self.step_to_namednode(&path_name, rank);
+                let handle = self.storage.graph.path_handle_at_step(path_id, step).expect("All steps should have handles");
+                let node = self.handle_to_namednode(handle);
+                if let Some(next_step) = self.storage.graph.path_next_step(path_id, step) {
+                    self.step = Some(StepInfos(next_step, rank + 1, 3));
+                } else {
+                    self.curr_path = self.path_ids.next();
+                    self.set_first_step();
+                }
+                Some(EncodedQuad {
+                    subject: step_node.unwrap(),
+                    predicate: vg::NODE_PRED.into(),
+                    object: node.unwrap(),
+                    graph_name: self.graph_name.clone(),
+                })
+            } else {
+                panic!("ps2");
+            }
+        } else {
+            self.step = None;
+            self.mode = IterMode::Finished;
+            None
         }
     }
 
@@ -1939,6 +1974,7 @@ mod tests {
             get_node(9),
             EncodedTerm::DefaultGraph,
         );
+        print_quad(&quad);
         assert_eq!(step_triples.len(), 10, "Number of node_pred triples");
         assert!(step_triples.contains(&quad));
     }
