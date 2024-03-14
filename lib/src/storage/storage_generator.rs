@@ -1214,7 +1214,7 @@ impl GraphIter {
             self.storage.base, path_name, position
         );
         Some(EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         })
     }
@@ -1467,7 +1467,7 @@ impl GraphIter {
         let id = handle.unpack_number();
         let text = format!("{}/node/{}", self.storage.base, id);
         Some(EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         })
     }
@@ -1477,7 +1477,7 @@ impl GraphIter {
         // let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", self.storage.base, path_name, rank);
         Some(EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         })
     }
@@ -1487,7 +1487,7 @@ impl GraphIter {
         // let path_name = path_name.replace("#", "/");
         let text = format!("{}/path/{}", self.storage.base, path_name);
         Some(EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         })
     }
@@ -1680,7 +1680,7 @@ mod tests {
     fn get_node(id: i64) -> EncodedTerm {
         let text = format!("{}/node/{}", BASE, id);
         EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         }
     }
@@ -1689,7 +1689,7 @@ mod tests {
         // let path = path.replace("#", "/");
         let text = format!("{}/path/{}/step/{}", BASE, path, id);
         EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         }
     }
@@ -1698,7 +1698,7 @@ mod tests {
         // let path = path.replace("#", "/");
         let text = format!("{}/path/{}/position/{}", BASE, path, id);
         EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         }
     }
@@ -1707,7 +1707,7 @@ mod tests {
         // let path = path.replace("#", "/");
         let text = format!("{}/path/{}", BASE, path);
         EncodedTerm::NamedNode {
-            iri_id: StrHash::new(""),
+            iri_id: StrHash::new(&text),
             value: text,
         }
     }

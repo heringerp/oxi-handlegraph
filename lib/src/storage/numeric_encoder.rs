@@ -111,13 +111,13 @@ impl PartialEq for EncodedTerm {
             (
                 Self::NamedNode {
                     iri_id: iri_id_a,
-                    value: value_a,
+                    value: _,
                 },
                 Self::NamedNode {
                     iri_id: iri_id_b,
-                    value: value_b,
+                    value: _,
                 },
-            ) => value_a == value_b,
+            ) => iri_id_a == iri_id_b,
             (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
                 id_a == id_b
             }
