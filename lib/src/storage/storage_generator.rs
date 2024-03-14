@@ -139,6 +139,7 @@ enum SubMode {
     PathSteps(bool),
     PathForStep,
     AllStepNodes,
+    ReverseLink,
     StepNode,
     StepFaldoBegin,
 }
@@ -237,6 +238,7 @@ impl Iterator for GraphIter {
                 SubMode::PathSteps(all_paths) => self.path_steps(all_paths),
                 SubMode::PathForStep => self.path_for_step(),
                 SubMode::AllStepNodes => self.all_step_nodes(),
+                SubMode::ReverseLink => self.reverse_link(),
                 SubMode::StepNode => self.step_node(),
                 SubMode::StepFaldoBegin => self.step_faldo_begin(),
                 _ => panic!("Should never be called without setting submode"),
@@ -275,7 +277,7 @@ impl GraphIter {
         //result.iter = result.clone().quads_for_pattern();
         result.quads_for_pattern();
         result.print_query(false);
-        // println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
+        println!("Set state: {:?}, {:?}", result.mode, result.sub_mode);
         result
     }
 
@@ -332,6 +334,21 @@ impl GraphIter {
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), faldo::BEGIN) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepFaldoBegin;
+        } else if self.is_vocab(self.predicate.as_ref(), vg::LINKS) && self.object.is_some() {
+            self.mode = IterMode::Single;
+            self.sub_mode = SubMode::ReverseLink;
+            let handle = Handle::new(
+                    self.get_node_id(self.object.as_ref().unwrap())
+                        .expect("Subject is node"),
+                    Orientation::Forward,
+                );
+            self.curr_handle = Some(handle);
+            self.edges = self
+                .storage
+                .graph
+                .neighbors(handle, Direction::Right)
+                .collect::<Vec<_>>()
+                .into_iter();
         } else if self.subject.is_some() && self.is_vocab(self.predicate.as_ref(), vg::NODE_PRED) {
             self.mode = IterMode::Single;
             self.sub_mode = SubMode::StepNode;
@@ -491,6 +508,21 @@ impl GraphIter {
         }
     }
 
+    fn reverse_link(&mut self) -> Option<EncodedQuad> {
+        if let Some(lneighbor) = self.edges.next() {
+            let node = self.handle_to_namednode(lneighbor)?;
+            Some(EncodedQuad { 
+                subject: node,
+                predicate: vg::LINKS.into(),
+                object: self.object.clone().unwrap(),
+                graph_name: self.graph_name.clone()
+            })
+        } else {
+            self.mode = IterMode::Finished;
+            None
+        }
+    }
+
     fn all_step_nodes(&mut self) -> Option<EncodedQuad> {
         if let Some(path_id) = self.curr_path {
             if let Some(StepInfos(step, rank, _)) = self.step {
@@ -585,8 +617,13 @@ impl GraphIter {
                         (Some(triple), SubMode::AllNodes(nnts))
                     } else {
                         self.curr_handle = self.handles.next();
-                        self.sub_mode = SubMode::AllNodes(NodeState::Type);
-                        (self.nodes(), self.sub_mode)
+                        while self.curr_handle.is_some() {
+                            if let (Some(triple), nnts) = self.node_triple(self.curr_handle.unwrap(), NodeState::Type) {
+                                self.sub_mode = SubMode::AllNodes(nnts);
+                                return Some(triple);
+                            }
+                        }
+                        (None, self.sub_mode)
                     }
                 } else {
                     (None, SubMode::AllNodes(NodeState::Type))
