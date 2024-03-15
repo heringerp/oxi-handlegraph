@@ -16,12 +16,13 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = []
+default = ["rocksdb"]
+rocksdb = ["oxrocksdb-sys"]
 js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
 http-client = ["oxhttp"]
 http-client-native-tls = ["http-client", "oxhttp/native-tls"]
-http-client-rustls-webpki = ["http-client", "oxhttp/rustls-webpki"]
-http-client-rustls-native = ["http-client", "oxhttp/rustls-native"]
+http-client-rustls-webpki = ["http-client", "oxhttp/rustls-ring-webpki"]
+http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 
@@ -50,7 +51,7 @@ handlegraph = { git = "https://github.com/chfi/rs-handlegraph", branch = "master
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true
 oxhttp = { workspace = true, optional = true }
-oxrocksdb-sys.workspace = true
+oxrocksdb-sys = { workspace = true, optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom.workspace = true
@@ -70,3 +71,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bench]]
 name = "store"
 harness = false
+required-features = ["rocksdb"]

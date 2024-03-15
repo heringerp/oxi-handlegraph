@@ -19,7 +19,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0-alpha.3-dev"
+version = "0.4.0-alpha.5-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
@@ -45,7 +45,7 @@ json-event-parser = "0.2.0-alpha.2"
 libc = "0.2.147"
 md-5 = "0.10"
 memchr = "2.5"
-oxhttp = "0.2.0-alpha.3"
+oxhttp = "0.2.0-alpha.4"
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
 peg = "0.8"
@@ -68,16 +68,16 @@ wasm-bindgen = "0.2.83"
 zstd = ">=0.12, <0.14"
 
 # Internal dependencies
-oxigraph = { version = "0.4.0-alpha.3-dev", path = "lib/oxigraph" }
-oxrdf = { version = "0.2.0-alpha.2", path = "lib/oxrdf" }
-oxrdfio = { version = "0.1.0-alpha.3-dev", path = "lib/oxrdfio" }
-oxrdfxml = { version = "0.1.0-alpha.3-dev", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "0.4.0-alpha.3-dev", path = "./oxrocksdb-sys" }
+oxigraph = { version = "0.4.0-alpha.4", path = "lib/oxigraph" }
+oxrdf = { version = "0.2.0-alpha.4-dev", path = "lib/oxrdf" }
+oxrdfio = { version = "0.1.0-alpha.4-dev", path = "lib/oxrdfio" }
+oxrdfxml = { version = "0.1.0-alpha.4-dev", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { version = "0.4.0-alpha.3", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "0.2.0-alpha.1", path = "lib/oxsdatatypes" }
-oxttl = { version = "0.1.0-alpha.3-dev", path = "lib/oxttl" }
-sparesults = { version = "0.2.0-alpha.2", path = "lib/sparesults" }
-spargebra = { version = "0.3.0-alpha.2", path = "lib/spargebra" }
-sparopt = { version = "0.1.0-alpha.2", path = "lib/sparopt" }
+oxttl = { version = "0.1.0-alpha.4-dev", path = "lib/oxttl" }
+sparesults = { version = "0.2.0-alpha.4-dev", path = "lib/sparesults" }
+spargebra = { version = "0.3.0-alpha.4-dev", path = "lib/spargebra" }
+sparopt = { version = "0.1.0-alpha.4-dev", path = "lib/sparopt" }
 sparql-smith = { version = "0.1.0-alpha.5", path = "lib/sparql-smith" }
 
 [workspace.lints.rust]
@@ -149,12 +149,15 @@ implicit_hasher = "warn"
 inconsistent_struct_constructor = "warn"
 index_refutable_slice = "warn"
 inefficient_to_string = "warn"
+infinite_loop = "warn"
 inline_always = "warn"
 inline_asm_x86_att_syntax = "warn"
 inline_asm_x86_intel_syntax = "warn"
+into_iter_without_iter = "warn"
 invalid_upcast_comparisons = "warn"
 items_after_statements = "warn"
 iter_not_returning_iterator = "warn"
+iter_without_into_iter = "warn"
 large_digit_groups = "warn"
 large_futures = "warn"
 large_include_file = "warn"
@@ -182,7 +185,6 @@ mem_forget = "warn"
 mismatching_type_param_order = "warn"
 missing_assert_message = "warn"
 missing_asserts_for_indexing = "warn"
-missing_enforced_import_renames = "warn"
 missing_fields_in_debug = "warn"
 multiple_inherent_impl = "warn"
 mut_mut = "warn"
@@ -192,6 +194,7 @@ needless_bitwise_bool = "warn"
 needless_continue = "warn"
 needless_for_each = "warn"
 needless_pass_by_value = "warn"
+needless_raw_string_hashes = "warn"
 needless_raw_strings = "warn"
 negative_feature_names = "warn"
 no_effect_underscore_binding = "warn"
@@ -231,6 +234,7 @@ string_add_assign = "warn"
 string_lit_chars_any = "warn"
 string_to_string = "warn"
 struct_excessive_bools = "warn"
+struct_field_names = "warn"
 suspicious_xor_used_as_pow = "warn"
 tests_outside_test_module = "warn"
 todo = "warn"

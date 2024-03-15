@@ -1,13 +1,11 @@
-use crate::named_node::NamedNode;
+use crate::named_node::{NamedNode, NamedNodeRef};
 use crate::vocab::{rdf, xsd};
-use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
-use std::option::Option;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///

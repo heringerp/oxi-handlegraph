@@ -33,7 +33,7 @@ use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::iter::{empty, once, Iterator};
+use std::iter::{empty, once};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io, str};
@@ -2505,8 +2505,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_double_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_double_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_double_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2535,8 +2535,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_float_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_float_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_float_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2565,8 +2565,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_integer_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_integer_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_integer_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2595,8 +2595,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_decimal_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_decimal_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_decimal_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2616,8 +2616,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_date_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_date_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_date_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2637,8 +2637,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_time_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_time_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_time_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2658,8 +2658,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_date_time_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_date_time_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_date_time_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2682,8 +2682,8 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_duration_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
-                                        parse_duration_str(&dataset.get_str(&value_id).ok()??)
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                                        parse_duration_str(&value)
                                     }
                                     _ => None,
                                 })
@@ -2705,9 +2705,9 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_year_month_duration_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
                                         parse_year_month_duration_str(
-                                            &dataset.get_str(&value_id).ok()??,
+                                            &value,
                                         )
                                     }
                                     _ => None,
@@ -2730,9 +2730,9 @@ impl SimpleEvaluator {
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_day_time_duration_str(&value)
                                     }
-                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                    EncodedTerm::BigStringLiteral { value_id, value } => {
                                         parse_day_time_duration_str(
-                                            &dataset.get_str(&value_id).ok()??,
+                                            &value,
                                         )
                                     }
                                     _ => None,

@@ -23,7 +23,7 @@ pub use crate::named_node::{NamedNode, NamedNodeRef};
 pub use crate::parser::TermParseError;
 pub use crate::triple::{
     GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Subject,
-    SubjectRef, Term, TermRef, Triple, TripleRef,
+    SubjectRef, Term, TermRef, Triple, TripleRef, TryFromTermError,
 };
 pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
 pub use oxilangtag::LanguageTagParseError;

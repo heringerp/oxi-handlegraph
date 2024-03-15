@@ -1,27 +1,38 @@
 #![allow(clippy::same_name_method)]
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use crate::model::Quad;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
-use crate::storage::backend::Transaction;
-use crate::storage::binary_encoder::QuadEncoding;
+use crate::storage::backend::{Reader, Transaction};
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use crate::storage::binary_encoder::LATEST_STORAGE_VERSION;
+use crate::storage::binary_encoder::{
+    decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
+    write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
+    write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
+    WRITTEN_TERM_MAX_SIZE,
+};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use crate::storage::numeric_encoder::Decoder;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+
 use gfa::parser::GFAParser;
 use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
 use std::str;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::collections::VecDeque;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::collections::{HashMap, HashSet};
-#[cfg(not(target_family = "wasm"))]
-use std::mem::swap;
-#[cfg(not(target_family = "wasm"))]
-use std::path::Path;
-#[cfg(not(target_family = "wasm"))]
+use std::error::Error;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use std::mem::{swap, take};
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use std::path::{Path, PathBuf};
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::sync::Mutex;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::{io, thread};
 
 use self::storage_generator::StorageGenerator;
@@ -34,7 +45,7 @@ pub mod small_string;
 mod storage_generator;
 mod vg_vocab;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
@@ -64,7 +75,7 @@ impl Storage {
         })
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open(path: &Path) -> Result<Self, StorageError> {
         let gfa_parser = GFAParser::new();
         let gfa = gfa_parser
@@ -77,7 +88,7 @@ impl Storage {
         })
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open_secondary(primary_path: &Path) -> Result<Self, StorageError> {
         let gfa_parser = GFAParser::new();
         let gfa = gfa_parser
@@ -90,7 +101,7 @@ impl Storage {
         })
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open_persistent_secondary(
         primary_path: &Path,
         _secondary_path: &Path,
@@ -144,12 +155,12 @@ impl Storage {
         Ok(())
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn compact(&self) -> Result<(), StorageError> {
         Ok(())
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
         Ok(())
     }
@@ -220,24 +231,24 @@ impl StorageReader {
         Ok(true)
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(None)
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         Ok(true)
     }
 
     /// Validates that all the storage invariants held in the data
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn validate(&self) -> Result<(), StorageError> {
         Ok(())
     }
 
     /// Validates that all the storage invariants held in the data
-    #[cfg(target_family = "wasm")]
+    #[cfg(any(target_family = "wasm", not(feature = "rocksdb")))]
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn validate(&self) -> Result<(), StorageError> {
         Ok(()) // TODO
@@ -460,31 +471,6 @@ impl<'a> StorageWriter<'a> {
     //     }
     // }
 
-    // #[cfg(not(target_family = "wasm"))]
-    // fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-    //     if self
-    //         .storage
-    //         .db
-    //         .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())?
-    //     {
-    //         return Ok(());
-    //     }
-    //     self.storage.db.insert(
-    //         &self.storage.id2str_cf,
-    //         &key.to_be_bytes(),
-    //         value.as_bytes(),
-    //     )
-    // }
-
-    // #[cfg(target_family = "wasm")]
-    // fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-    //     self.transaction.insert(
-    //         &self.storage.id2str_cf,
-    //         &key.to_be_bytes(),
-    //         value.as_bytes(),
-    //     )
-    // }
-
     pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
         // self.remove_encoded(&quad.into())
         Ok(true)
@@ -643,7 +629,7 @@ impl<'a> StorageWriter<'a> {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 #[must_use]
 pub struct StorageBulkLoader {
     storage: Storage,
@@ -652,7 +638,7 @@ pub struct StorageBulkLoader {
     max_memory_size: Option<usize>,
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 impl StorageBulkLoader {
     pub fn new(storage: Storage) -> Self {
         Self {
@@ -783,7 +769,7 @@ impl StorageBulkLoader {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 struct FileBulkLoader<'a> {
     storage: &'a Storage,
     id2str: HashMap<StrHash, Box<str>>,
@@ -792,7 +778,7 @@ struct FileBulkLoader<'a> {
     graphs: HashSet<EncodedTerm>,
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 impl<'a> FileBulkLoader<'a> {
     fn new(storage: &'a Storage, batch_size: usize) -> Self {
         Self {
@@ -998,7 +984,7 @@ impl<'a> FileBulkLoader<'a> {
     // }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
     result.map_err(|e| {
         io::Error::new(

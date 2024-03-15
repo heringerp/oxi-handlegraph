@@ -534,6 +534,72 @@ impl From<SubjectRef<'_>> for Term {
     }
 }
 
+impl TryFrom<Term> for NamedNode {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::NamedNode(node) = term {
+            Ok(node)
+        } else {
+            Err(TryFromTermError {
+                term,
+                target: "NamedNode",
+            })
+        }
+    }
+}
+
+impl TryFrom<Term> for BlankNode {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::BlankNode(node) = term {
+            Ok(node)
+        } else {
+            Err(TryFromTermError {
+                term,
+                target: "BlankNode",
+            })
+        }
+    }
+}
+
+impl TryFrom<Term> for Literal {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::Literal(node) = term {
+            Ok(node)
+        } else {
+            Err(TryFromTermError {
+                term,
+                target: "Literal",
+            })
+        }
+    }
+}
+
+impl TryFrom<Term> for Subject {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(term) => Ok(Self::NamedNode(term)),
+            Term::BlankNode(term) => Ok(Self::BlankNode(term)),
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(term) => Ok(Self::Triple(term)),
+            Term::Literal(_) => Err(TryFromTermError {
+                term,
+                target: "Subject",
+            }),
+        }
+    }
+}
+
 /// A borrowed RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -736,6 +802,22 @@ impl Triple {
             predicate: predicate.into(),
             object: object.into(),
         }
+    }
+
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) from [`Term`]s.
+    ///
+    /// Returns a [`TryFromTermError`] error if the generated triple would be ill-formed.
+    #[inline]
+    pub fn from_terms(
+        subject: impl Into<Term>,
+        predicate: impl Into<Term>,
+        object: impl Into<Term>,
+    ) -> Result<Self, TryFromTermError> {
+        Ok(Self {
+            subject: subject.into().try_into()?,
+            predicate: predicate.into().try_into()?,
+            object: object.into(),
+        })
     }
 
     /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
@@ -1222,5 +1304,65 @@ impl<'a> From<QuadRef<'a>> for Quad {
     #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         quad.into_owned()
+    }
+}
+
+/// An error return by some [`TryFrom<Term>`](TryFrom)  implementations.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{term} can not be converted to a {target}")]
+pub struct TryFromTermError {
+    pub(crate) term: Term,
+    pub(crate) target: &'static str,
+}
+
+impl TryFromTermError {
+    /// The term that can't be converted
+    #[inline]
+    pub fn into_term(self) -> Term {
+        self.term
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
+    use super::*;
+
+    #[test]
+    fn triple_from_terms() -> Result<(), TryFromTermError> {
+        assert_eq!(
+            Triple::from_terms(
+                NamedNode::new_unchecked("http://example.com/s"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+            )?,
+            Triple::new(
+                NamedNode::new_unchecked("http://example.com/s"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+            )
+        );
+        assert_eq!(
+            Triple::from_terms(
+                Literal::new_simple_literal("foo"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+            )
+            .unwrap_err()
+            .into_term(),
+            Term::from(Literal::new_simple_literal("foo"))
+        );
+        assert_eq!(
+            Triple::from_terms(
+                NamedNode::new_unchecked("http://example.com/s"),
+                Literal::new_simple_literal("foo"),
+                NamedNode::new_unchecked("http://example.com/o"),
+            )
+            .unwrap_err()
+            .into_term(),
+            Term::from(Literal::new_simple_literal("foo"))
+        );
+        Ok(())
     }
 }
