@@ -9,6 +9,22 @@ When cloning this codebase, don't forget to clone the submodules using
 `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or
 `git submodule update --init` to add the submodules to the already cloned repository.
 
+## Usage
+
+Build oxi-handlegraph with:
+```
+cargo build --release
+```
+
+Run server:
+```
+./target/release/oxigraph_server serve -l <path_to_gfa>
+```
+
+Run query from CLI:
+```
+./target/release/oxigraph_server query -l <path_to_gfa> --results-file out.txt --query-file <path_to_sparql_query>
+```
 
 ## Help
 
