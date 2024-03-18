@@ -1,0 +1,13 @@
+PREFIX vg:<http://biohackathon.org/resource/vg#> 
+PREFIX paths:<https://example.org/path/>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT
+  ?nodes
+  ?sequence
+WHERE 
+{
+  ?step vg:path paths:x ;
+        vg:node ?nodes .
+  ?nodes rdf:value ?sequence .
+} 

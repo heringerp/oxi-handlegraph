@@ -16,6 +16,12 @@ data/
 **.pyi
 
 *.txt
+!query/*.txt
 *.gfa
+!lib/*.gfa
 *.ttl
+*.svg
+**/perf.data
+**/perf.data.old
+**/run/
 

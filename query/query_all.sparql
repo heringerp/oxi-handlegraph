@@ -1,0 +1,10 @@
+PREFIX vg:<http://biohackathon.org/resource/vg#> 
+
+SELECT
+  ?s
+  ?p
+  ?o
+WHERE 
+{
+  ?s ?p ?o .
+} 

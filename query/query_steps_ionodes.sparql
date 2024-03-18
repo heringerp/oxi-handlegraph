@@ -1,0 +1,14 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX vg: <http://biohackathon.org/resource/vg#>
+PREFIX faldo: <http://biohackathon.org/resource/faldo#>
+SELECT
+  ?step
+(COUNT(?node2) AS ?olinks)
+(COUNT(?node3) AS ?ilinks)
+WHERE {
+  ?step vg:node ?node .
+  ?node vg:links ?node2 .
+  ?node3 vg:links ?node .
+}
+GROUP BY ?step

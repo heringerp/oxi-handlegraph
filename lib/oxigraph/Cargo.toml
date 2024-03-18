@@ -47,6 +47,8 @@ sparopt = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
 thiserror.workspace = true
 gfa = "0.10.1"
 handlegraph = { git = "https://github.com/chfi/rs-handlegraph", branch = "master" }
+genawaiter = "0.99.1"
+time = { version = "0.3", features = ["local-offset", "formatting", "macros"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true

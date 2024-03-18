@@ -100,6 +100,9 @@ pub enum EncodedTerm {
     Triple(Arc<EncodedTriple>),
 }
 
+unsafe impl Send for EncodedTerm {}
+unsafe impl Sync for EncodedTerm {}
+
 impl PartialEq for EncodedTerm {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -107,11 +110,11 @@ impl PartialEq for EncodedTerm {
             (
                 Self::NamedNode {
                     iri_id: iri_id_a,
-                    value: value_a,
+                    value: _,
                 },
                 Self::NamedNode {
                     iri_id: iri_id_b,
-                    value: value_b,
+                    value: _,
                 },
             ) => iri_id_a == iri_id_b,
             (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
@@ -963,7 +966,6 @@ pub trait Decoder: StrLookup {
 
 impl<S: StrLookup> Decoder for S {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
-        println!("DECODING: {:?}", encoded);
         match encoded {
             EncodedTerm::DefaultGraph => {
                 Err(CorruptionError::msg("The default graph tag is not a valid term").into())

@@ -18,6 +18,9 @@ use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, Str
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 
 use gfa::parser::GFAParser;
+use handlegraph::handlegraph::HandleGraph;
+use handlegraph::path_position::PathPositionMap;
+use handlegraph::pathhandlegraph::GraphPaths;
 use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
 use std::str;
 
@@ -52,13 +55,16 @@ const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 #[derive(Clone)]
 pub struct Storage {
     graph: PackedGraph,
+    position_map: PathPositionMap,
     base: String,
 }
 
 impl Storage {
     pub fn new() -> Result<Self, StorageError> {
+        let graph = PackedGraph::new();
         Ok(Self {
-            graph: PackedGraph::new(),
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -70,7 +76,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -83,7 +90,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -96,7 +104,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -112,7 +121,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -125,7 +135,8 @@ impl Storage {
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
         Ok(Self {
-            graph,
+            graph: graph.clone(),
+            position_map: PathPositionMap::index_paths(&graph),
             base: "https://example.org".to_owned(),
         })
     }
@@ -179,14 +190,15 @@ impl StorageReader {
         }
     }
     pub fn len(&self) -> Result<usize, StorageError> {
-        // Ok(self.reader.len(&self.storage.gspo_cf)? + self.reader.len(&self.storage.dspo_cf)?)
-        Ok(0)
+        let node_triples = self.generator.storage.graph.node_count() * 2;
+        let path_triples = self.generator.storage.graph.path_count();
+        let step_triples = 0;
+        let edge_triples = self.generator.storage.graph.edge_count() * 2;
+        Ok(node_triples + path_triples + step_triples + edge_triples)
     }
 
     pub fn is_empty(&self) -> Result<bool, StorageError> {
-        // Ok(self.reader.is_empty(&self.storage.gspo_cf)?
-        // && self.reader.is_empty(&self.storage.dspo_cf)?)
-        Ok(true)
+        Ok(self.generator.storage.graph.node_count() == 0)
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, StorageError> {
@@ -215,7 +227,7 @@ impl StorageReader {
 
     pub fn quads(&self) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(DecodingQuadIterator {
-            terms: Vec::new(),
+            terms: Box::new(Vec::new().into_iter()),
             encoding: QuadEncoding::Spog,
         })
         // ChainedDecodingQuadIterator::pair(self.dspo_quads(&[]), self.gspo_quads(&[]))
@@ -291,7 +303,7 @@ impl Iterator for ChainedDecodingQuadIterator {
 }
 
 pub struct DecodingQuadIterator {
-    terms: Vec<EncodedQuad>,
+    terms: Box<dyn Iterator<Item = EncodedQuad>>,
     encoding: QuadEncoding,
 }
 
@@ -304,7 +316,7 @@ impl Iterator for DecodingQuadIterator {
         // }
         // let term = self.encoding.decode(self.iter.key()?);
         // self.iter.next();
-        self.terms.pop().map(|x| Ok(x))
+        self.terms.next().map(|x| Ok(x))
     }
 }
 

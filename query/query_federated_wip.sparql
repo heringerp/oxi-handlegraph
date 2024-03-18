@@ -1,0 +1,66 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX vg: <http://biohackathon.org/resource/vg#>
+PREFIX faldo: <http://biohackathon.org/resource/faldo#>
+PREFIX fhir: <http://hl7.org/fhir/>
+
+SELECT
+    ?node
+    ?step
+	?pat_id
+	?handle
+WHERE {
+    {
+        SELECT
+            ?step
+    		?pat_id
+        WHERE {
+            {
+                SELECT
+                    ?path
+        			?pat_id
+                WHERE {
+                    SERVICE <http://localhost:3030/Patient_FHIR> {
+                        {
+                            SELECT
+                                (SUBSTR(?pat, 9) AS ?pat_id)
+                            WHERE {
+                                ?con fhir:Condition.code [ fhir:CodeableConcept.text [ fhir:value "Osteroporose" ] ] .
+                                ?con fhir:Condition.subject [ fhir:Reference.reference [ fhir:value ?pat ] ] .
+                            }
+                        }
+                        ?patient fhir:Patient.identifier [ fhir:Identifier.value [ fhir:value ?pat_id ] ] .
+                        ?patient fhir:sampleName ?haplo .
+                    }
+                    ?path rdf:type vg:Path .
+                    FILTER( CONTAINS( STR(?path), ?haplo ) ) .
+                }
+            }
+            ?step vg:path ?path .
+        }
+    }
+    {
+        SELECT ?c (MAX(?value) AS ?max) (MIN(?value) AS ?min) WHERE {
+            { 
+                SELECT ?rminstep WHERE {
+                    ?rminstep vg:path <https://example.org/path/GRCh38/chrY> .
+                }
+            }
+            ?rminstep faldo:begin ?pos .
+            ?rminstep vg:node ?minnode .
+            BIND(1 AS ?c) .
+            BIND(xsd:integer(STRAFTER(STR(?minnode), "node/")) AS ?value)
+            FILTER(?pos >= 2000000) .
+            FILTER(?pos <= 6000000).
+        }
+        GROUP BY ?c
+    }
+    ?step vg:node ?node .
+    BIND(xsd:integer(STRAFTER(STR(?node), "node/")) AS ?handle) .
+    FILTER(?handle >= ?min) . 
+    FILTER(?handle <= ?max) .
+}
+
+
+# "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX vg: <http://biohackathon.org/resource/vg#> PREFIX faldo: <http://biohackathon.org/resource/faldo#> PREFIX fhir: <http://hl7.org/fhir/> SELECT ?node ?step ?pat_id ?handle WHERE { { SELECT ?step ?pat_id WHERE { { SELECT ?path ?pat_id WHERE { SERVICE <http://localhost:3030/Patient_FHIR> { { SELECT (SUBSTR(?pat, 9) AS ?pat_id) WHERE { ?con fhir:Condition.code [ fhir:CodeableConcept.text [ fhir:value 'Osteroporose' ] ] . ?con fhir:Condition.subject [ fhir:Reference.reference [ fhir:value ?pat ] ] . } } ?patient fhir:Patient.identifier [ fhir:Identifier.value [ fhir:value ?pat_id ] ] . ?patient fhir:sampleName ?haplo . } ?path rdf:type vg:Path . FILTER( CONTAINS( STR(?path), ?haplo ) ) . } } ?step vg:path ?path . } } { SELECT ?c (MAX(?value) AS ?max) (MIN(?value) AS ?min) WHERE { { SELECT ?rminstep WHERE { ?rminstep vg:path <https://example.org/path/GRCh38/chrY> . } } ?rminstep faldo:begin ?pos . ?rminstep vg:node ?minnode . BIND(1 AS ?c) . BIND(xsd:integer(STRAFTER(STR(?minnode), 'node/')) AS ?value) FILTER(?pos >= 2000000) . FILTER(?pos <= 6000000). } GROUP BY ?c } ?step vg:node ?node . BIND(xsd:integer(STRAFTER(STR(?node), 'node/')) AS ?handle) . FILTER(?handle >= ?min) . FILTER(?handle <= ?max) . }"
