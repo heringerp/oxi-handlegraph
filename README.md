@@ -1,6 +1,6 @@
-# oxi-handlegraph
+# oxiqle
 
-This is a fork of oxigraph that includes [rs-handlegraph](https://github.com/chfi/rs-handlegraph).
+oxiqle (OXIgraph-based sparQL Endpoint) is a fork of oxigraph that includes [rs-handlegraph](https://github.com/chfi/rs-handlegraph).
 The purpose is to make pangenomic GFA-files accessible with SPARQL queries.
 
 [Oxigraph](https://github.com/oxigraph/oxigraph) is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
