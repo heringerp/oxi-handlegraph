@@ -1,16 +1,26 @@
 cff-version: 1.2.0
-abstract: "Oxigraph is a graph database implementing the SPARQL standard."
+abstract: "oxiqle is a fork of Oxigraph using GFA files as databases"
 authors:
   - given-names: Thomas
     family-names: Pellissier Tanon
     email: thomas@pellissier-tanon.fr
     orcid: "https://orcid.org/0000-0002-0620-6486"
-doi: 10.5281/zenodo.7408022
+  - given-names: Peter
+    family-names: Heringer
+    email: heringer@protonmail.com
 license:
   - Apache-2.0
   - MIT
+references:
+  - authors:
+      - family-names: Thomas
+        given-names: Pellissier Tanon
+        email: thomas@pellissier-tanon.fr
+        orcid: "https://orcid.org/0000-0002-0620-6486"
+    title: Oxigraph
+    type: software
+    repository-code: "https://github.com/oxigraph/oxigraph"
 message: "If you use this software, please cite it as below."
-repository-code: "https://github.com/oxigraph/oxigraph"
+repository-code: "https://github.com/heringerp/oxiqle"
 title: Oxigraph
 type: software
-url: "https://oxigraph.org"
