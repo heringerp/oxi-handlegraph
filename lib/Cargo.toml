@@ -45,8 +45,6 @@ spargebra = { version = "0.2.8", path="spargebra", features = ["rdf-star", "sep-
 sparesults = { version = "0.1.8", path="sparesults", features = ["rdf-star"] }
 gfa = "0.10.1"
 handlegraph = { git = "https://github.com/chfi/rs-handlegraph", branch = "master" }
-rayon = "1.8.0"
-urlencoding = "2.1.3"
 genawaiter = "0.99.1"
 time = { version = "0.3", features = ["local-offset", "formatting", "macros"] }
 

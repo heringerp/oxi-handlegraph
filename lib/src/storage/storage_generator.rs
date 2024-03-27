@@ -12,7 +12,7 @@ use crate::storage::vg_vocab::{faldo, vg};
 use crate::storage::DecodingQuadIterator;
 use core::panic;
 use genawaiter::{
-    rc::{gen, Gen},
+    rc::gen,
     yield_,
 };
 use gfa::gfa::Orientation;
@@ -28,8 +28,7 @@ use handlegraph::{
     handlegraph::IntoHandles, handlegraph::IntoNeighbors, handlegraph::IntoSequences,
 };
 use oxrdf::vocab::rdfs;
-use oxrdf::{Literal, NamedNode};
-use rayon::iter::{ParallelBridge, ParallelIterator};
+use oxrdf::Literal;
 use std::rc::Rc;
 use std::str;
 use std::vec::IntoIter;
